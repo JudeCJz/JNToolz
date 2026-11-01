@@ -14,7 +14,7 @@ Installing JNToolz on your phone (or a friend's phone) takes less than 1 minute.
 
 ### Step 1: Download the APK
 1. Open your mobile browser and navigate to the **[Latest Release](https://github.com/JudeCJz/JNToolz/releases/latest)**.
-2. Under **Assets**, tap **`JNToolz-v1.0.3.apk`** to download it.
+2. Under **Assets**, tap **`JNToolz-v1.0.4.apk`** to download it.
 
 ### Step 2: Install the App
 1. When download completes, tap the notification or open your **Files** / **Downloads** app and tap the APK file.
@@ -71,4 +71,4 @@ git clone https://github.com/JudeCJz/JNToolz.git
 cd JNToolz
 ./gradlew assembleRelease
 ```
-The output APK is `app/build/outputs/apk/release/JNToolz-v1.0.3.apk` (R8-minified; signed with the debug keystore so updates install over earlier builds).
+The output APK is `app/build/outputs/apk/release/JNToolz-v1.0.4.apk` (R8-minified; signed with the debug keystore so updates install over earlier builds).

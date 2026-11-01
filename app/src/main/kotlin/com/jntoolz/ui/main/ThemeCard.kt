@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -35,8 +37,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jntoolz.data.ThemeMath
 import com.jntoolz.data.ThemeSettings
+import kotlin.math.roundToInt
 
-internal enum class PickerTarget { MARKER, CARD }
+internal enum class PickerTarget { MARKER, CARD, GRADIENT }
 
 private val MARKER_STYLES = listOf("OFF", "DOT", "RING", "BAR", "CARD")
 private val MARKER_PRESETS = listOf(
@@ -44,6 +47,8 @@ private val MARKER_PRESETS = listOf(
     0xFF33B679L, 0xFFF6BF26L, 0xFFBA68C8L
 )
 private val MARKER_SWATCHES = MARKER_PRESETS.map { SwatchSpec(color = it) }
+private val GRADIENT_PRESETS = listOf(0L, 0xFFFFFFFFL, 0xFF000000L, 0xFFFF2E2EL, 0xFF039BE5L, 0xFFF6BF26L)
+private val GRADIENT_SWATCHES = GRADIENT_PRESETS.map { SwatchSpec(color = it) }
 private val CARD_PRESETS = listOf(0xFF202121L, 0xFF2B1414L, 0xFF0F1E28L, 0xFF17241AL)
 private val CARD_SWATCHES = CARD_PRESETS.map { SwatchSpec(color = it) } +
     listOf("CHARCOAL", "RUBY", "CYBER", "AMBER").map { SwatchSpec(color = 0xFF000000L, gradient = it) }
@@ -63,7 +68,7 @@ internal fun ThemeCard(
         border = BorderStroke(1.dp, DividerGrey)
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-            ThemeSwitchRow("Google colors", theme.useGoogleColors) { c -> onChange { it.copy(useGoogleColors = c) } }
+            ThemeSwitchRow("Google colors", theme.useGoogleColors, tag = "ALPHA") { c -> onChange { it.copy(useGoogleColors = c) } }
             ThemeDivider()
 
             ThemeLabel("Marker")
@@ -112,6 +117,29 @@ internal fun ThemeCard(
             }
 
             ThemeSwitchRow("Gradient", theme.gradient) { c -> onChange { it.copy(gradient = c) } }
+            if (theme.gradient) {
+                ThemeLabel("Intensity")
+                Slider(
+                    value = theme.gradientIntensity.toFloat(),
+                    onValueChange = { v -> onChange { it.copy(gradientIntensity = v.roundToInt()) } },
+                    valueRange = 0f..100f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = TextWhite,
+                        activeTrackColor = AccentRed,
+                        inactiveTrackColor = DividerGrey
+                    )
+                )
+                ThemeLabel("Top color")
+                val topColor = theme.gradientTop.toLong() and 0xFFFFFFFFL
+                SwatchRow(
+                    presets = GRADIENT_SWATCHES,
+                    selectedColor = topColor,
+                    customSelected = topColor !in GRADIENT_PRESETS,
+                    customColor = topColor,
+                    onSelect = { spec -> onChange { it.copy(gradientTop = spec.color.toInt()) } },
+                    onCustom = { onPick(PickerTarget.GRADIENT) }
+                )
+            }
             ThemeDivider()
             ThemeSwitchRow("Fade", theme.fade) { c -> onChange { it.copy(fade = c) } }
 
@@ -155,7 +183,7 @@ private fun ThemeDivider() {
 }
 
 @Composable
-private fun ThemeSwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun ThemeSwitchRow(label: String, checked: Boolean, tag: String? = null, onChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -163,13 +191,30 @@ private fun ThemeSwitchRow(label: String, checked: Boolean, onChange: (Boolean) 
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = label,
-            color = TextWhite,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = label,
+                color = TextWhite,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+            if (tag != null) {
+                Text(
+                    text = tag,
+                    color = AccentRed,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp,
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(AccentRed.copy(alpha = 0.15f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
         Switch(
             checked = checked,
             onCheckedChange = onChange,

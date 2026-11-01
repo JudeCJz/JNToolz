@@ -61,6 +61,14 @@ class WidgetPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_GRADIENT_ON, false)
         set(value) = prefs.edit().putBoolean(KEY_GRADIENT_ON, value).apply()
 
+    var gradientTopColor: Long // 0 = auto
+        get() = prefs.getLong(KEY_GRADIENT_TOP, 0L)
+        set(value) = prefs.edit().putLong(KEY_GRADIENT_TOP, value).apply()
+
+    var gradientIntensity: Int // 0..100
+        get() = prefs.getInt(KEY_GRADIENT_INTENSITY, 25)
+        set(value) = prefs.edit().putInt(KEY_GRADIENT_INTENSITY, value).apply()
+
     fun getEnabledCalendarIds(): Set<String> {
         return prefs.getStringSet(KEY_ENABLED_CALENDARS, emptySet()) ?: emptySet()
     }
@@ -107,5 +115,7 @@ class WidgetPreferences(context: Context) {
         private const val KEY_CARD_GRADIENT = "card_gradient"
         private const val KEY_MARKER_COLOR = "marker_color"
         private const val KEY_GRADIENT_ON = "gradient_on"
+        private const val KEY_GRADIENT_TOP = "gradient_top"
+        private const val KEY_GRADIENT_INTENSITY = "gradient_intensity"
     }
 }

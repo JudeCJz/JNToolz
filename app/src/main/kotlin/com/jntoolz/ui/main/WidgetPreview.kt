@@ -20,7 +20,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -198,6 +200,8 @@ internal fun EventBoxItem(
                 color = Color(look.title),
                 fontSize = 13.sp,
                 fontFamily = FontFamily.Monospace,
+                lineHeight = 13.sp,
+                style = LocalTextStyle.current.copy(platformStyle = PlatformTextStyle(includeFontPadding = false)),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -206,9 +210,11 @@ internal fun EventBoxItem(
                 color = Color(look.sub),
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
+                lineHeight = 11.sp,
+                style = LocalTextStyle.current.copy(platformStyle = PlatformTextStyle(includeFontPadding = false)),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 1.dp)
+                modifier = Modifier.padding(top = 2.dp)
             )
         }
     }

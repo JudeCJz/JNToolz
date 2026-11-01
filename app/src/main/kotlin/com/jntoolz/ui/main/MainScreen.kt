@@ -145,11 +145,17 @@ fun MainScreen(
 
     pickerTarget?.let { target ->
         ColorPickerDialog(
-            initial = if (target == PickerTarget.MARKER) theme.markerColor else theme.cardColor,
+            initial = when (target) {
+                PickerTarget.MARKER -> theme.markerColor
+                PickerTarget.GRADIENT -> theme.gradientTop
+                else -> theme.cardColor
+            },
             onDismiss = { pickerTarget = null },
             onConfirm = { argb ->
                 if (target == PickerTarget.MARKER) {
                     viewModel.updateTheme { it.copy(markerColor = argb) }
+                } else if (target == PickerTarget.GRADIENT) {
+                    viewModel.updateTheme { it.copy(gradientTop = argb or ThemeMath.OPAQUE) }
                 } else {
                     viewModel.updateTheme { it.copy(gradientStyle = "NONE", cardColor = argb) }
                 }
@@ -256,11 +262,24 @@ fun MainScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = TextWhite, contentColor = BgScreen)
                     ) {
                         Text(
-                            text = "+ ADD SCROLLABLE WIDGET",
+                            text = "+ ADD WIDGET",
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             letterSpacing = 1.sp,
                             modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                }
+
+                item(key = "previewHeader") {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        SectionHeader("PREVIEW")
+                        Text(
+                            text = "· tap a card to edit its color",
+                            color = MutedGrey.copy(alpha = 0.6f),
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(start = 8.dp, bottom = 5.dp)
                         )
                     }
                 }

@@ -70,6 +70,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             if (new.gradientStyle != old.gradientStyle) prefs.cardGradientStyle = new.gradientStyle
             if (new.markerColor != old.markerColor) prefs.markerColor = new.markerColor.toLong() and 0xFFFFFFFFL
             if (new.gradient != old.gradient) prefs.isGradientEnabled = new.gradient
+            if (new.gradientTop != old.gradientTop) prefs.gradientTopColor = new.gradientTop.toLong() and 0xFFFFFFFFL
+            if (new.gradientIntensity != old.gradientIntensity) prefs.gradientIntensity = new.gradientIntensity
             WidgetUpdater.updateAllWidgets(getApplication())
         }
     }

@@ -12,7 +12,9 @@ data class ThemeSettings(
     val cardColor: Int,           // ARGB
     val gradientStyle: String,    // NONE, CHARCOAL, RUBY, CYBER, AMBER
     val markerColor: Int = 0,     // 0 = automatic
-    val gradient: Boolean = false // light-to-normal vertical gradient on card fills
+    val gradient: Boolean = false, // top-colour-to-normal vertical gradient on card fills
+    val gradientTop: Int = 0,      // 0 = auto (white tint)
+    val gradientIntensity: Int = 25 // 0..100
 ) {
     companion object {
         fun from(p: WidgetPreferences) = ThemeSettings(
@@ -24,7 +26,9 @@ data class ThemeSettings(
             cardColor = p.customCardColor.toInt(),
             gradientStyle = p.cardGradientStyle,
             markerColor = p.markerColor.toInt(),
-            gradient = p.isGradientEnabled
+            gradient = p.isGradientEnabled,
+            gradientTop = p.gradientTopColor.toInt(),
+            gradientIntensity = p.gradientIntensity
         )
     }
 }
@@ -97,8 +101,8 @@ object ThemeMath {
     fun resolve(t: ThemeSettings, eventColor: Int, index: Int, isToday: Boolean, isFirstToday: Boolean): CardLook {
         val idx = index.coerceIn(0, 4)
         val step = if (t.fade) idx / 4f else 0f
-        val frac = step * 0.35f      // card fill fade, capped at 35%
-        val textFrac = step * 0.30f  // text fade, capped at 30%
+        val frac = step * 0.65f      // card fill fade, capped at 65%
+        val textFrac = step * 0.50f  // text fade, capped at 50%
         val bgRgb = effectiveBg(t.bgColor)
         val cardMode = t.useGoogleColors && t.markerStyle == "CARD"
 
@@ -117,7 +121,7 @@ object ThemeMath {
             surface = fill
         } else if (t.gradientStyle != "NONE") {
             gradient = t.gradientStyle
-            val a = if (t.fade) (1f - idx * 0.0875f).coerceIn(0.65f, 1f) else 1f
+            val a = if (t.fade) (1f - idx * 0.15f).coerceIn(0.4f, 1f) else 1f
             fillAlpha = (a * 255).roundToInt()
             fill = gradientStart(t.gradientStyle)
             surface = blend(bgRgb, fill, a)
@@ -144,6 +148,9 @@ object ThemeMath {
             else -> if (light) 0xFF111111.toInt() else 0xFFFFFFFF.toInt()
         }
         val lg = t.gradient && gradient == null
-        return CardLook(gradient, fill, fillAlpha, title, sub, markerVisible, markerColor, lg, if (lg) blend(fill, 0xFFFFFFFF.toInt(), 0.25f) else fill)
+        return CardLook(gradient, fill, fillAlpha, title, sub, markerVisible, markerColor, lg, if (lg) {
+            val top = if (t.gradientTop == 0) 0xFFFFFFFF.toInt() else opaque(t.gradientTop)
+            blend(fill, top, t.gradientIntensity.coerceIn(0, 100) / 100f)
+        } else fill)
     }
 }
