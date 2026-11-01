@@ -1,9 +1,14 @@
 package com.jntoolz.data
 
 import android.content.Context
+import android.content.Intent
+import android.widget.Toast
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
 
@@ -23,19 +28,19 @@ object UpdateChecker {
     const val GITHUB_REPO_URL = "https://github.com/$REPO_OWNER/$REPO_NAME"
 
     val CURRENT_VERSION_CHANGELOG = """
-        • Pure AMOLED Black Widget (#000000) inspired by Nothing OS
-        • 5-Tier Gradual Card Fade completely blending into background
-        • Collapsible Google Account dropdowns with calendar toggles
-        • Native offline background sync (works 100% with debugging OFF)
-        • Seamless GitHub release auto-updater and changelog view
+        • In-App Direct APK Downloader & Installer
+        • Google Calendar Event Color Sync (Dot Markers or Entire Card)
+        • Theme Section: Custom Background, Distance Fade & Gradient Cards
+        • Compact 4x2 Grid Typography (Single-line headers & sub-items)
+        • Relocated Google Sync action under Google Calendars
     """.trimIndent()
 
     fun getCurrentVersionName(context: Context): String {
         return try {
             val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            pInfo.versionName ?: "1.0"
+            pInfo.versionName ?: "1.0.1"
         } catch (e: Exception) {
-            "1.0"
+            "1.0.1"
         }
     }
 
@@ -103,6 +108,85 @@ object UpdateChecker {
                 htmlUrl = "$GITHUB_REPO_URL/releases",
                 hasUpdate = false
             )
+        }
+    }
+
+    suspend fun downloadAndInstallApk(
+        context: Context,
+        downloadUrl: String,
+        onProgress: (Float) -> Unit
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            var currentUrl = downloadUrl
+            var conn: HttpURLConnection
+            var redirects = 0
+            while (true) {
+                val url = URI(currentUrl).toURL()
+                conn = url.openConnection() as HttpURLConnection
+                conn.instanceFollowRedirects = true
+                conn.connectTimeout = 15000
+                conn.readTimeout = 25000
+                conn.setRequestProperty("User-Agent", "JNToolz-Android-App")
+
+                val status = conn.responseCode
+                if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
+                    val location = conn.getHeaderField("Location")
+                    if (location != null && redirects < 5) {
+                        currentUrl = location
+                        redirects++
+                        continue
+                    }
+                }
+                break
+            }
+
+            val totalBytes = conn.contentLengthLong
+            val cacheDir = File(context.cacheDir, "updates").apply { if (!exists()) mkdirs() }
+            val apkFile = File(cacheDir, "JNToolz-latest.apk").apply { if (exists()) delete() }
+
+            conn.inputStream.use { input ->
+                FileOutputStream(apkFile).use { output ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var totalRead = 0L
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        totalRead += bytesRead
+                        if (totalBytes > 0) {
+                            val progress = (totalRead.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
+                            withContext(Dispatchers.Main) {
+                                onProgress(progress)
+                            }
+                        }
+                    }
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                installApk(context, apkFile)
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    fun installApk(context: Context, apkFile: File) {
+        try {
+            val contentUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                apkFile
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(contentUri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(context, "Installation error: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 

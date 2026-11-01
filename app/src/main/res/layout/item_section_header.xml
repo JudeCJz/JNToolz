@@ -5,10 +5,13 @@
     android:layout_height="wrap_content"
     android:text="U P C O M I N G"
     android:textColor="#8E8E8E"
-    android:textSize="11sp"
+    android:textSize="10.5sp"
     android:textStyle="bold"
-    android:letterSpacing="0.18"
+    android:letterSpacing="0.12"
+    android:maxLines="1"
+    android:singleLine="true"
+    android:ellipsize="end"
     android:fontFamily="monospace"
     android:paddingStart="4dp"
-    android:paddingTop="6dp"
-    android:paddingBottom="12dp" />
+    android:paddingTop="4dp"
+    android:paddingBottom="8dp" />

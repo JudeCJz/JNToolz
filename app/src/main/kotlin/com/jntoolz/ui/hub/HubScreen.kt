@@ -36,7 +36,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -92,14 +92,15 @@ fun HubScreen(
     var showUpdateDialog by remember { mutableStateOf(false) }
     var showWhatsNewDialog by remember { mutableStateOf(false) }
 
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(0f) }
+
     // Check on every open whether an update or new version notes should appear
     LaunchedEffect(Unit) {
-        // If app version is newer than last seen version, trigger "What's New" release notes
         if (prefs.lastSeenVersion.isNotEmpty() && prefs.lastSeenVersion != currentVersion) {
             showWhatsNewDialog = true
         }
 
-        // Check GitHub releases for updates
         isCheckingUpdate = true
         val info = UpdateChecker.checkForUpdates(context)
         releaseInfo = info
@@ -313,11 +314,13 @@ fun HubScreen(
         }
     }
 
-    // Update Available Dialog
+    // In-App Update Dialog
     if (showUpdateDialog && releaseInfo != null) {
         val info = releaseInfo!!
         AlertDialog(
-            onDismissRequest = { showUpdateDialog = false },
+            onDismissRequest = {
+                if (!isDownloading) showUpdateDialog = false
+            },
             containerColor = DialogBg,
             shape = RoundedCornerShape(20.dp),
             title = {
@@ -356,17 +359,55 @@ fun HubScreen(
                         lineHeight = 18.sp,
                         fontFamily = FontFamily.Monospace
                     )
+
+                    if (isDownloading) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        LinearProgressIndicator(
+                            progress = { downloadProgress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = AccentRed,
+                            trackColor = BorderGrey,
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (downloadProgress > 0f) "Downloading: ${(downloadProgress * 100).toInt()}%" else "Starting download...",
+                            fontSize = 10.5.sp,
+                            color = MutedGrey,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        showUpdateDialog = false
-                        val targetUrl = info.apkUrl ?: info.htmlUrl
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        if (isDownloading) return@Button
+                        val targetApkUrl = info.apkUrl
+                        if (targetApkUrl != null && targetApkUrl.endsWith(".apk", ignoreCase = true)) {
+                            isDownloading = true
+                            downloadProgress = 0f
+                            coroutineScope.launch {
+                                val result = UpdateChecker.downloadAndInstallApk(context, targetApkUrl) { progress ->
+                                    downloadProgress = progress
+                                }
+                                isDownloading = false
+                                if (!result.isSuccess) {
+                                    Toast.makeText(context, "Direct download failed, opening browser...", Toast.LENGTH_SHORT).show()
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.htmlUrl)).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            }
+                        } else {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.htmlUrl)).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
                         }
-                        context.startActivity(intent)
                     },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
@@ -374,22 +415,39 @@ fun HubScreen(
                         contentColor = TextWhite
                     )
                 ) {
-                    Text(
-                        text = "DOWNLOAD UPDATE",
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp
-                    )
+                    if (isDownloading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(13.dp),
+                            color = TextWhite,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "DOWNLOADING...",
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp
+                        )
+                    } else {
+                        Text(
+                            text = "UPDATE IN-APP",
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp
+                        )
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showUpdateDialog = false }) {
-                    Text(
-                        text = "SKIP",
-                        color = MutedGrey,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp
-                    )
+                if (!isDownloading) {
+                    TextButton(onClick = { showUpdateDialog = false }) {
+                        Text(
+                            text = "SKIP",
+                            color = MutedGrey,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp
+                        )
+                    }
                 }
             }
         )

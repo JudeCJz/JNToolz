@@ -23,7 +23,7 @@ private sealed class TimelineListItem {
         val event: CalendarEvent,
         val isFirstToday: Boolean,
         val isToday: Boolean,
-        val eventIndex: Int // 0 for the top-most event, 1 for second, etc.
+        val eventIndex: Int
     ) : TimelineListItem()
 }
 
@@ -45,7 +45,6 @@ private class NothingViewsFactory(private val context: Context) : RemoteViewsSer
 
         var currentEventIdx = 0
 
-        // "if there is nothing scheduld for today dont show teh today secion at all"
         if (todayEvents.isNotEmpty()) {
             items.add(TimelineListItem.Header("T O D A Y"))
             todayEvents.forEachIndexed { idx, ev ->
@@ -97,30 +96,81 @@ private class NothingViewsFactory(private val context: Context) : RemoteViewsSer
             is TimelineListItem.EventItem -> {
                 val views = RemoteViews(context.packageName, R.layout.item_event_box)
                 val event = item.event
+                val useGoogleColors = prefs.useGoogleEventColors
+                val googleColorMode = prefs.googleColorDisplayMode
+                val isFadeEnabled = prefs.isFadeEnabled
+                val gradientStyle = prefs.cardGradientStyle
+                val baseCardColor = prefs.customCardColor.toInt()
+                val widgetBgColor = prefs.widgetBackgroundColor.toInt()
 
-                // "make sure the color fading completely fades into the background color"
-                val bgRes = when (item.eventIndex) {
-                    0 -> R.drawable.box_event_tier_0 // #202121
-                    1 -> R.drawable.box_event_tier_1 // #161717
-                    2 -> R.drawable.box_event_tier_2 // #0D0E0E
-                    3 -> R.drawable.box_event_tier_3 // #050505
-                    else -> R.drawable.box_event_tier_4 // #000000 (completely faded into background)
+                // 1. Box background & color
+                if (useGoogleColors && googleColorMode == "BOX") {
+                    views.setImageViewResource(R.id.iv_box_bg, R.drawable.box_event_shape)
+                    val cardTint = getGoogleBoxTintColor(event.color, item.eventIndex, isFadeEnabled)
+                    views.setInt(R.id.iv_box_bg, "setColorFilter", cardTint)
+                } else if (!useGoogleColors && gradientStyle != "NONE") {
+                    val gradRes = when (gradientStyle) {
+                        "RUBY" -> R.drawable.box_gradient_ruby
+                        "CYBER" -> R.drawable.box_gradient_cyber
+                        "AMBER" -> R.drawable.box_gradient_amber
+                        else -> R.drawable.box_gradient_charcoal
+                    }
+                    views.setImageViewResource(R.id.iv_box_bg, gradRes)
+                    if (isFadeEnabled) {
+                        val alpha = (255 * (1f - (item.eventIndex.coerceIn(0, 4) * 0.18f))).toInt().coerceIn(40, 255)
+                        views.setInt(R.id.iv_box_bg, "setImageAlpha", alpha)
+                    } else {
+                        views.setInt(R.id.iv_box_bg, "setImageAlpha", 255)
+                    }
+                    views.setInt(R.id.iv_box_bg, "setColorFilter", 0)
+                } else {
+                    views.setImageViewResource(R.id.iv_box_bg, R.drawable.box_event_shape)
+                    views.setInt(R.id.iv_box_bg, "setImageAlpha", 255)
+                    val color = if (isFadeEnabled) {
+                        getFadeColor(baseCardColor, widgetBgColor, item.eventIndex)
+                    } else {
+                        baseCardColor
+                    }
+                    views.setInt(R.id.iv_box_bg, "setColorFilter", color)
                 }
-                views.setInt(R.id.box_container, "setBackgroundResource", bgRes)
 
-                val titleColor = when (item.eventIndex) {
-                    0 -> Color.parseColor("#FFFFFF")
-                    1 -> Color.parseColor("#D8D8D8")
-                    2 -> Color.parseColor("#AEAEAE")
-                    3 -> Color.parseColor("#808080")
-                    else -> Color.parseColor("#555555")
+                // 2. Timeline Marker
+                val defaultMarkerRes = when {
+                    item.isFirstToday -> R.drawable.marker_today_first
+                    item.isToday -> R.drawable.marker_today_other
+                    else -> R.drawable.marker_upcoming
                 }
-                val subColor = when (item.eventIndex) {
-                    0 -> Color.parseColor("#A0A0A0")
-                    1 -> Color.parseColor("#888888")
-                    2 -> Color.parseColor("#707070")
-                    3 -> Color.parseColor("#505050")
-                    else -> Color.parseColor("#383838")
+                views.setImageViewResource(R.id.iv_marker, defaultMarkerRes)
+
+                if (useGoogleColors && googleColorMode == "DOT") {
+                    views.setInt(R.id.iv_marker, "setColorFilter", event.color)
+                } else {
+                    views.setInt(R.id.iv_marker, "setColorFilter", 0)
+                }
+
+                // 3. Text Colors
+                val titleColor = if (isFadeEnabled) {
+                    when (item.eventIndex) {
+                        0 -> Color.parseColor("#FFFFFF")
+                        1 -> Color.parseColor("#E0E0E0")
+                        2 -> Color.parseColor("#BCBCBC")
+                        3 -> Color.parseColor("#8E8E8E")
+                        else -> Color.parseColor("#606060")
+                    }
+                } else {
+                    Color.parseColor("#FFFFFF")
+                }
+
+                val subColor = if (isFadeEnabled) {
+                    when (item.eventIndex) {
+                        0 -> Color.parseColor("#A8A8A8")
+                        1 -> Color.parseColor("#909090")
+                        2 -> Color.parseColor("#787878")
+                        3 -> Color.parseColor("#5A5A5A")
+                        else -> Color.parseColor("#444444")
+                    }
+                } else {
+                    Color.parseColor("#9E9E9E")
                 }
 
                 views.setTextColor(R.id.tv_title, titleColor)
@@ -132,15 +182,7 @@ private class NothingViewsFactory(private val context: Context) : RemoteViewsSer
                     if (item.isToday) event.getFormattedTime() else event.getFormattedUpcomingDateTime()
                 )
 
-                // Timeline marker
-                val markerRes = when {
-                    item.isFirstToday -> R.drawable.marker_today_first
-                    item.isToday -> R.drawable.marker_today_other
-                    else -> R.drawable.marker_upcoming
-                }
-                views.setImageViewResource(R.id.iv_marker, markerRes)
-
-                // Fill-in intent to open Google Calendar at that month
+                // Fill-in intent to open Google Calendar at event time
                 val fillInIntent = Intent().apply {
                     putExtra(NothingCalendarWidgetProvider.EXTRA_EVENT_TIME, event.startTime)
                 }
@@ -151,11 +193,24 @@ private class NothingViewsFactory(private val context: Context) : RemoteViewsSer
         }
     }
 
+    private fun getFadeColor(baseColor: Int, targetColor: Int, index: Int): Int {
+        val fraction = (index.coerceIn(0, 4) / 4f)
+        val r = (Color.red(baseColor) + fraction * (Color.red(targetColor) - Color.red(baseColor))).toInt().coerceIn(0, 255)
+        val g = (Color.green(baseColor) + fraction * (Color.green(targetColor) - Color.green(baseColor))).toInt().coerceIn(0, 255)
+        val b = (Color.blue(baseColor) + fraction * (Color.blue(targetColor) - Color.blue(baseColor))).toInt().coerceIn(0, 255)
+        return Color.rgb(r, g, b)
+    }
+
+    private fun getGoogleBoxTintColor(color: Int, index: Int, fade: Boolean): Int {
+        val factor = if (!fade) 0.22f else maxOf(0.04f, 0.26f - (index * 0.05f))
+        val r = (Color.red(color) * factor).toInt().coerceIn(0, 255)
+        val g = (Color.green(color) * factor).toInt().coerceIn(0, 255)
+        val b = (Color.blue(color) * factor).toInt().coerceIn(0, 255)
+        return Color.rgb(r, g, b)
+    }
+
     override fun getLoadingView(): RemoteViews? = null
-
     override fun getViewTypeCount(): Int = 3
-
     override fun getItemId(position: Int): Long = position.toLong()
-
     override fun hasStableIds(): Boolean = false
 }

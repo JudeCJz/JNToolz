@@ -101,6 +101,9 @@ class NothingCalendarWidgetProvider : AppWidgetProvider() {
             views.setViewVisibility(R.id.lv_events, View.VISIBLE)
             views.setViewVisibility(R.id.tv_empty, View.GONE)
 
+            val widgetBg = prefs.widgetBackgroundColor.toInt()
+            views.setInt(R.id.widget_root, "setBackgroundColor", widgetBg)
+
             // Connect Scrollable RemoteViewsService
             val serviceIntent = Intent(context, NothingWidgetService::class.java).apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
