@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base Nothing OS Colors -->
+    <color name="nothing_black">#000000</color>
+    <color name="nothing_red">#FF2E2E</color>
+    <color name="nothing_white">#FFFFFF</color>
+    <color name="nothing_grey_muted">#8E8E8E</color>
+    <color name="nothing_divider">#252525</color>
+    <color name="nothing_border">#00000000</color>
+
+    <color name="nothing_dark_surface">#1B1C1C</color>
+    <color name="nothing_card_dark">#1B1C1C</color>
+    <color name="nothing_border_dark">#00000000</color>
+    <color name="nothing_light_surface">#F5F5F5</color>
+    <color name="nothing_card_light">#EAEAEA</color>
+    <color name="nothing_border_light">#D4D4D4</color>
+    <color name="nothing_grey_light">#AAAAAA</color>
+
+    <!-- Widget theme colors -->
+    <color name="widget_card_bg">#000000</color>
+    <color name="widget_accent_color">#FF2E2E</color>
+    <color name="widget_heading_color">#8E8E8E</color>
+    <color name="widget_border_color">#00000000</color>
+    <color name="widget_divider_color">#252525</color>
+    <color name="widget_upcoming_marker">#FFFFFF</color>
+    <color name="widget_text_primary">#FFFFFF</color>
+    <color name="widget_text_secondary">#8E8E8E</color>
+    <color name="widget_timeline_line">#505050</color>
+
+    <color name="widget_dynamic_background">#000000</color>
+    <color name="widget_dynamic_surface">#000000</color>
+    <color name="widget_dynamic_border">#00000000</color>
+    <color name="widget_dynamic_text_primary">#FFFFFF</color>
+    <color name="widget_dynamic_text_secondary">#8E8E8E</color>
+    <color name="widget_dynamic_accent">#FF2E2E</color>
+</resources>

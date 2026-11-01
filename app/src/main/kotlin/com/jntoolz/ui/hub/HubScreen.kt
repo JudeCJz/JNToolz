@@ -1,0 +1,455 @@
+package com.jntoolz.ui.hub
+
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.jntoolz.R
+import com.jntoolz.data.ReleaseInfo
+import com.jntoolz.data.UpdateChecker
+import com.jntoolz.data.WidgetPreferences
+import com.jntoolz.widget.WidgetUpdater
+import kotlinx.coroutines.launch
+
+private val BgScreen = Color(0xFF000000)
+private val CardBg = Color(0xFF141414)
+private val DialogBg = Color(0xFF161616)
+private val TextWhite = Color(0xFFFFFFFF)
+private val MutedGrey = Color(0xFF8E8E8E)
+private val AccentRed = Color(0xFFFF2E2E)
+private val BorderGrey = Color(0xFF222222)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HubScreen(
+    onOpenCalendar: () -> Unit
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val prefs = remember { WidgetPreferences(context) }
+    var isCalendarEnabled by remember { mutableStateOf(prefs.isCalendarToolEnabled) }
+
+    val currentVersion = remember { UpdateChecker.getCurrentVersionName(context) }
+    var releaseInfo by remember { mutableStateOf<ReleaseInfo?>(null) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var showWhatsNewDialog by remember { mutableStateOf(false) }
+
+    // Check on every open whether an update or new version notes should appear
+    LaunchedEffect(Unit) {
+        // If app version is newer than last seen version, trigger "What's New" release notes
+        if (prefs.lastSeenVersion.isNotEmpty() && prefs.lastSeenVersion != currentVersion) {
+            showWhatsNewDialog = true
+        }
+
+        // Check GitHub releases for updates
+        isCheckingUpdate = true
+        val info = UpdateChecker.checkForUpdates(context)
+        releaseInfo = info
+        isCheckingUpdate = false
+    }
+
+    // Glowing animation when an update is available
+    val infiniteTransition = rememberInfiniteTransition(label = "updateGlow")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(700, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowAlpha"
+    )
+
+    Scaffold(
+        containerColor = BgScreen,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_jntoolz_logo),
+                            contentDescription = "JNToolz Logo",
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "JNTOOLZ",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 2.sp,
+                                color = TextWhite
+                            )
+                            Text(
+                                text = "v$currentVersion",
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 1.sp,
+                                color = MutedGrey
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = BgScreen)
+            )
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Calendar App Card
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp)),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = CardBg),
+                        border = BorderStroke(1.dp, BorderGrey)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Calendar Logo
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_calendar_logo),
+                                contentDescription = "Calendar",
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onOpenCalendar() }
+                            )
+
+                            Spacer(modifier = Modifier.width(16.dp))
+
+                            // App Title & Status
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onOpenCalendar() }
+                            ) {
+                                Text(
+                                    text = "Calendar",
+                                    color = TextWhite,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = if (isCalendarEnabled) "Enabled • Tap to configure" else "Disabled",
+                                    color = if (isCalendarEnabled) MutedGrey else AccentRed,
+                                    fontSize = 11.5.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            // Enable / Disable Switch
+                            Switch(
+                                checked = isCalendarEnabled,
+                                onCheckedChange = { checked ->
+                                    isCalendarEnabled = checked
+                                    prefs.isCalendarToolEnabled = checked
+                                    WidgetUpdater.updateAllWidgets(context)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = TextWhite,
+                                    checkedTrackColor = AccentRed,
+                                    uncheckedThumbColor = MutedGrey,
+                                    uncheckedTrackColor = Color(0xFF222222)
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Bottom-Right Update Pill Button
+            val hasUpdate = releaseInfo?.hasUpdate == true
+            Card(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(20.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .clickable {
+                        if (hasUpdate) {
+                            showUpdateDialog = true
+                        } else {
+                            coroutineScope.launch {
+                                isCheckingUpdate = true
+                                val info = UpdateChecker.checkForUpdates(context)
+                                releaseInfo = info
+                                isCheckingUpdate = false
+                                if (info.hasUpdate) {
+                                    showUpdateDialog = true
+                                } else {
+                                    Toast.makeText(context, "JNToolz v$currentVersion is up to date!", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    },
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (hasUpdate) Color(0xFF1F0808) else Color(0xFF141414)
+                ),
+                border = BorderStroke(
+                    width = if (hasUpdate) 1.5.dp else 1.dp,
+                    color = if (hasUpdate) AccentRed.copy(alpha = glowAlpha) else BorderGrey
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isCheckingUpdate) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            color = AccentRed,
+                            strokeWidth = 1.5.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    } else if (hasUpdate) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(AccentRed.copy(alpha = glowAlpha))
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+
+                    Text(
+                        text = when {
+                            isCheckingUpdate -> "CHECKING..."
+                            hasUpdate -> "UPDATE: ${releaseInfo?.tagName ?: "NEW"}"
+                            else -> "UPDATES"
+                        },
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp,
+                        color = if (hasUpdate) AccentRed else MutedGrey
+                    )
+                }
+            }
+        }
+    }
+
+    // Update Available Dialog
+    if (showUpdateDialog && releaseInfo != null) {
+        val info = releaseInfo!!
+        AlertDialog(
+            onDismissRequest = { showUpdateDialog = false },
+            containerColor = DialogBg,
+            shape = RoundedCornerShape(20.dp),
+            title = {
+                Text(
+                    text = "UPDATE AVAILABLE",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.5.sp,
+                    color = TextWhite
+                )
+            },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = "${info.title} (${info.tagName})",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AccentRed,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "PATCHES & FEATURES:",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MutedGrey,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = info.changelog,
+                        fontSize = 12.sp,
+                        color = TextWhite,
+                        lineHeight = 18.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUpdateDialog = false
+                        val targetUrl = info.apkUrl ?: info.htmlUrl
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(intent)
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AccentRed,
+                        contentColor = TextWhite
+                    )
+                ) {
+                    Text(
+                        text = "DOWNLOAD UPDATE",
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUpdateDialog = false }) {
+                    Text(
+                        text = "SKIP",
+                        color = MutedGrey,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        )
+    }
+
+    // What's New On Relaunch Dialog
+    if (showWhatsNewDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                prefs.lastSeenVersion = currentVersion
+                showWhatsNewDialog = false
+            },
+            containerColor = DialogBg,
+            shape = RoundedCornerShape(20.dp),
+            title = {
+                Text(
+                    text = "WHAT'S NEW IN v$currentVersion",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp,
+                    color = TextWhite
+                )
+            },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = "LATEST PATCHES & IMPROVEMENTS:",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AccentRed,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = UpdateChecker.CURRENT_VERSION_CHANGELOG,
+                        fontSize = 12.sp,
+                        color = TextWhite,
+                        lineHeight = 18.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        prefs.lastSeenVersion = currentVersion
+                        showWhatsNewDialog = false
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = TextWhite,
+                        contentColor = BgScreen
+                    )
+                ) {
+                    Text(
+                        text = "GOT IT",
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        )
+    }
+}
