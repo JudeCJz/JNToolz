@@ -23,16 +23,26 @@ class WidgetPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_USE_GOOGLE_COLORS, false)
         set(value) = prefs.edit().putBoolean(KEY_USE_GOOGLE_COLORS, value).apply()
 
-    var googleColorDisplayMode: String // "DOT" or "BOX"
-        get() = prefs.getString(KEY_GOOGLE_COLOR_MODE, "DOT") ?: "DOT"
-        set(value) = prefs.edit().putString(KEY_GOOGLE_COLOR_MODE, value).apply()
+    var markerStyle: String // OFF, DOT, RING, BAR, CARD
+        get() {
+            val v = prefs.getString(KEY_MARKER_STYLE, null)
+            if (v != null) return v
+            // Migrate from the old DOT/BOX setting
+            return if (prefs.getString(KEY_GOOGLE_COLOR_MODE, "DOT") == "BOX") "CARD" else "DOT"
+        }
+        set(value) = prefs.edit().putString(KEY_MARKER_STYLE, value).apply()
+
+    var isDimEnabled: Boolean
+        get() = prefs.getBoolean(KEY_DIM_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_DIM_ENABLED, value).apply()
 
     var isFadeEnabled: Boolean
         get() = prefs.getBoolean(KEY_FADE_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_FADE_ENABLED, value).apply()
 
     var widgetBackgroundColor: Long
-        get() = prefs.getLong(KEY_WIDGET_BG_COLOR, 0xFF000000L)
+        // Background is fixed to black; the picker was removed
+        get() = 0xFF000000L
         set(value) = prefs.edit().putLong(KEY_WIDGET_BG_COLOR, value).apply()
 
     var customCardColor: Long
@@ -42,6 +52,14 @@ class WidgetPreferences(context: Context) {
     var cardGradientStyle: String // "NONE", "CHARCOAL", "RUBY", "CYBER"
         get() = prefs.getString(KEY_CARD_GRADIENT, "NONE") ?: "NONE"
         set(value) = prefs.edit().putString(KEY_CARD_GRADIENT, value).apply()
+
+    var markerColor: Long // 0 = automatic
+        get() = prefs.getLong(KEY_MARKER_COLOR, 0L)
+        set(value) = prefs.edit().putLong(KEY_MARKER_COLOR, value).apply()
+
+    var isGradientEnabled: Boolean
+        get() = prefs.getBoolean(KEY_GRADIENT_ON, false)
+        set(value) = prefs.edit().putBoolean(KEY_GRADIENT_ON, value).apply()
 
     fun getEnabledCalendarIds(): Set<String> {
         return prefs.getStringSet(KEY_ENABLED_CALENDARS, emptySet()) ?: emptySet()
@@ -81,9 +99,13 @@ class WidgetPreferences(context: Context) {
         private const val KEY_LAST_SEEN_VERSION = "last_seen_version"
         private const val KEY_USE_GOOGLE_COLORS = "use_google_colors"
         private const val KEY_GOOGLE_COLOR_MODE = "google_color_mode"
+        private const val KEY_MARKER_STYLE = "marker_style"
+        private const val KEY_DIM_ENABLED = "dim_enabled"
         private const val KEY_FADE_ENABLED = "fade_enabled"
         private const val KEY_WIDGET_BG_COLOR = "widget_bg_color"
         private const val KEY_CUSTOM_CARD_COLOR = "custom_card_color"
         private const val KEY_CARD_GRADIENT = "card_gradient"
+        private const val KEY_MARKER_COLOR = "marker_color"
+        private const val KEY_GRADIENT_ON = "gradient_on"
     }
 }

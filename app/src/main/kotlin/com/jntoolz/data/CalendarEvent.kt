@@ -10,7 +10,8 @@ data class CalendarInfo(
     val accountName: String,
     val displayName: String,
     val isVisibleInGoogle: Boolean,
-    val color: Int
+    val color: Int,
+    val ownerAccount: String = ""
 )
 
 data class CalendarEvent(
@@ -23,7 +24,9 @@ data class CalendarEvent(
     val isAllDay: Boolean,
     val location: String?,
     val color: Int,
-    val calendarDisplayName: String?
+    val calendarDisplayName: String?,
+    val labelId: String? = null,
+    val googleId: String? = null
 ) {
     fun isToday(): Boolean {
         val today = Calendar.getInstance()
@@ -75,11 +78,4 @@ data class CalendarEvent(
         val timeStr = if (isAllDay) "All day" else SimpleDateFormat("HH:mm", Locale.ENGLISH).format(date)
         return "$dateStr • $timeStr"
     }
-}
-
-enum class WidgetTheme(val title: String, val description: String) {
-    MONOCHROME_DARK("Nothing Black", "Deep AMOLED black with high contrast white text"),
-    DYNAMIC("Dynamic (Wallpaper)", "Automatically adapts to your home screen wallpaper colors"),
-    MONOCHROME_LIGHT("Nothing Light", "Crisp monochrome white theme"),
-    TRANSLUCENT("Frosted Glass", "Translucent dark glass matching subtle backgrounds")
 }

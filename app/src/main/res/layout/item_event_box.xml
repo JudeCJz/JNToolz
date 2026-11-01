@@ -8,7 +8,7 @@
     <FrameLayout
         android:id="@+id/box_container"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="56dp">
 
         <!-- Background layer that can be tinted or assigned gradient drawables -->
         <ImageView
@@ -21,20 +21,19 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp">
+            android:paddingEnd="12dp">
 
             <!-- Timeline Marker -->
             <ImageView
                 android:id="@+id/iv_marker"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
-                android:src="@drawable/marker_upcoming"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:src="@drawable/marker_dot"
                 android:contentDescription="Marker" />
 
             <!-- Event Info -->
@@ -42,8 +41,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:orientation="vertical"
-                android:layout_marginStart="10dp">
+                android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/tv_title"

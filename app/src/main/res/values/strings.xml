@@ -3,9 +3,4 @@
     <string name="widget_name">JNToolz Events</string>
     <string name="widget_description">Minimalist Nothing OS vertical calendar timeline with upcoming events.</string>
     
-    <string name="no_events_today">NO UPCOMING EVENTS</string>
-    <string name="all_day">ALL DAY</string>
-    <string name="add_to_home">ADD WIDGET TO HOME SCREEN</string>
-    <string name="grant_permission">GRANT CALENDAR ACCESS</string>
-    <string name="permission_desc">Allow access to sync events from your Google accounts into JNToolz.</string>
 </resources>

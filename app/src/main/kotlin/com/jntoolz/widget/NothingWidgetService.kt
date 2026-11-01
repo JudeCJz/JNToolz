@@ -1,18 +1,21 @@
 package com.jntoolz.widget
 
+import java.util.Objects
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
+import android.view.View
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
 import com.jntoolz.R
 import com.jntoolz.data.CalendarEvent
 import com.jntoolz.data.CalendarRepository
+import com.jntoolz.data.ThemeMath
+import com.jntoolz.data.ThemeSettings
 import com.jntoolz.data.WidgetPreferences
 
 class NothingWidgetService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory {
-        return NothingViewsFactory(applicationContext)
+        return NothingViewsFactory(applicationContext, intent.getIntExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, 0))
     }
 }
 
@@ -27,155 +30,149 @@ private sealed class TimelineListItem {
     ) : TimelineListItem()
 }
 
-private class NothingViewsFactory(private val context: Context) : RemoteViewsService.RemoteViewsFactory {
+private class Snapshot(
+    val items: List<TimelineListItem>,
+    val theme: ThemeSettings,
+    val cardWidthDp: Int = 222
+)
+
+private class NothingViewsFactory(private val context: Context, private val appWidgetId: Int) : RemoteViewsService.RemoteViewsFactory {
 
     private val repository = CalendarRepository(context)
     private val prefs = WidgetPreferences(context)
-    private val items = mutableListOf<TimelineListItem>()
+
+    @Volatile
+    private var snapshot = Snapshot(emptyList(), ThemeSettings.from(prefs))
 
     override fun onCreate() {}
 
+    private fun computeCardWidthDp(): Int {
+        val opts = android.appwidget.AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId)
+        val w = opts.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).coerceAtLeast(60)
+        return w - 28
+    }
+
+    @Synchronized
     override fun onDataSetChanged() {
-        items.clear()
-        if (!repository.hasCalendarPermission() || !prefs.isCalendarToolEnabled) return
+        val theme = ThemeSettings.from(prefs)
+        val cardWidth = computeCardWidthDp()
+        val built = ArrayList<TimelineListItem>()
 
-        val allEvents = repository.getUpcomingEvents(daysAhead = 180)
-        val todayEvents = allEvents.filter { it.isToday() }
-        val upcomingEvents = allEvents.filter { !it.isToday() }
-
-        var currentEventIdx = 0
-
-        if (todayEvents.isNotEmpty()) {
-            items.add(TimelineListItem.Header("T O D A Y"))
-            todayEvents.forEachIndexed { idx, ev ->
-                items.add(
-                    TimelineListItem.EventItem(
-                        event = ev,
-                        isFirstToday = (idx == 0),
-                        isToday = true,
-                        eventIndex = currentEventIdx++
-                    )
-                )
+        if (repository.hasCalendarPermission() && prefs.isCalendarToolEnabled) {
+            val allEvents = repository.getUpcomingEvents(daysAhead = 180)
+                .distinctBy { it.eventId to it.startTime }
+            val dayStart = java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
             }
-            items.add(TimelineListItem.Divider)
+            val from = dayStart.timeInMillis
+            dayStart.add(java.util.Calendar.DAY_OF_YEAR, 1)
+            val to = dayStart.timeInMillis
+            val (todayEvents, upcomingEvents) = allEvents.partition { it.startTime in from until to }
+
+            var currentEventIdx = 0
+
+            if (todayEvents.isNotEmpty()) {
+                built.add(TimelineListItem.Header("T O D A Y"))
+                todayEvents.forEachIndexed { idx, ev ->
+                    built.add(
+                        TimelineListItem.EventItem(
+                            event = ev,
+                            isFirstToday = (idx == 0),
+                            isToday = true,
+                            eventIndex = currentEventIdx++
+                        )
+                    )
+                }
+                built.add(TimelineListItem.Divider)
+            }
+
+            if (upcomingEvents.isNotEmpty()) {
+                built.add(TimelineListItem.Header("U P C O M I N G"))
+                upcomingEvents.forEach { ev ->
+                    built.add(
+                        TimelineListItem.EventItem(
+                            event = ev,
+                            isFirstToday = false,
+                            isToday = false,
+                            eventIndex = currentEventIdx++
+                        )
+                    )
+                }
+            }
         }
 
-        if (upcomingEvents.isNotEmpty()) {
-            items.add(TimelineListItem.Header("U P C O M I N G"))
-            upcomingEvents.forEach { ev ->
-                items.add(
-                    TimelineListItem.EventItem(
-                        event = ev,
-                        isFirstToday = false,
-                        isToday = false,
-                        eventIndex = currentEventIdx++
-                    )
-                )
-            }
-        }
+        // Single atomic swap
+        snapshot = Snapshot(built, theme, cardWidth)
     }
 
     override fun onDestroy() {
-        items.clear()
+        snapshot = Snapshot(emptyList(), snapshot.theme, snapshot.cardWidthDp)
     }
 
-    override fun getCount(): Int = items.size
+    override fun getCount(): Int = snapshot.items.size
 
     override fun getViewAt(position: Int): RemoteViews? {
-        if (position < 0 || position >= items.size) return null
+        val snap = snapshot
+        if (position < 0 || position >= snap.items.size) return null
+        val theme = snap.theme
 
-        return when (val item = items[position]) {
+        return when (val item = snap.items[position]) {
             is TimelineListItem.Header -> {
                 val views = RemoteViews(context.packageName, R.layout.item_section_header)
                 views.setTextViewText(R.id.tv_section_title, item.title)
+                views.setTextColor(R.id.tv_section_title, ThemeMath.headerColor(theme.bgColor))
                 views
             }
             is TimelineListItem.Divider -> {
-                RemoteViews(context.packageName, R.layout.item_divider)
+                val views = RemoteViews(context.packageName, R.layout.item_divider)
+                views.setInt(R.id.iv_divider, "setBackgroundColor", ThemeMath.dividerColor(theme.bgColor))
+                views
             }
             is TimelineListItem.EventItem -> {
                 val views = RemoteViews(context.packageName, R.layout.item_event_box)
                 val event = item.event
-                val useGoogleColors = prefs.useGoogleEventColors
-                val googleColorMode = prefs.googleColorDisplayMode
-                val isFadeEnabled = prefs.isFadeEnabled
-                val gradientStyle = prefs.cardGradientStyle
-                val baseCardColor = prefs.customCardColor.toInt()
-                val widgetBgColor = prefs.widgetBackgroundColor.toInt()
+                val look = ThemeMath.resolve(theme, event.color, item.eventIndex, item.isToday, item.isFirstToday)
 
-                // 1. Box background & color
-                if (useGoogleColors && googleColorMode == "BOX") {
-                    views.setImageViewResource(R.id.iv_box_bg, R.drawable.box_event_shape)
-                    val cardTint = getGoogleBoxTintColor(event.color, item.eventIndex, isFadeEnabled)
-                    views.setInt(R.id.iv_box_bg, "setColorFilter", cardTint)
-                } else if (!useGoogleColors && gradientStyle != "NONE") {
-                    val gradRes = when (gradientStyle) {
+                // 1. Card background
+                if (look.gradient != null) {
+                    val gradRes = when (look.gradient) {
                         "RUBY" -> R.drawable.box_gradient_ruby
                         "CYBER" -> R.drawable.box_gradient_cyber
                         "AMBER" -> R.drawable.box_gradient_amber
                         else -> R.drawable.box_gradient_charcoal
                     }
                     views.setImageViewResource(R.id.iv_box_bg, gradRes)
-                    if (isFadeEnabled) {
-                        val alpha = (255 * (1f - (item.eventIndex.coerceIn(0, 4) * 0.18f))).toInt().coerceIn(40, 255)
-                        views.setInt(R.id.iv_box_bg, "setImageAlpha", alpha)
-                    } else {
-                        views.setInt(R.id.iv_box_bg, "setImageAlpha", 255)
-                    }
+                    views.setInt(R.id.iv_box_bg, "setColorFilter", 0)
+                } else if (look.lightGradient) {
+                    views.setImageViewBitmap(
+                        R.id.iv_box_bg,
+                        WidgetBitmaps.card(context, look.fillTop, look.fill, look.fillAlpha, snap.cardWidthDp, 56)
+                    )
                     views.setInt(R.id.iv_box_bg, "setColorFilter", 0)
                 } else {
                     views.setImageViewResource(R.id.iv_box_bg, R.drawable.box_event_shape)
-                    views.setInt(R.id.iv_box_bg, "setImageAlpha", 255)
-                    val color = if (isFadeEnabled) {
-                        getFadeColor(baseCardColor, widgetBgColor, item.eventIndex)
-                    } else {
-                        baseCardColor
+                    views.setInt(R.id.iv_box_bg, "setColorFilter", look.fill)
+                }
+                views.setInt(R.id.iv_box_bg, "setImageAlpha", if (look.lightGradient) 255 else look.fillAlpha)
+
+                // 2. Marker
+                if (look.markerVisible) {
+                    val res = when (theme.markerStyle) {
+                        "RING" -> R.drawable.marker_ring
+                        "BAR" -> R.drawable.marker_bar
+                        else -> R.drawable.marker_dot
                     }
-                    views.setInt(R.id.iv_box_bg, "setColorFilter", color)
-                }
-
-                // 2. Timeline Marker
-                val defaultMarkerRes = when {
-                    item.isFirstToday -> R.drawable.marker_today_first
-                    item.isToday -> R.drawable.marker_today_other
-                    else -> R.drawable.marker_upcoming
-                }
-                views.setImageViewResource(R.id.iv_marker, defaultMarkerRes)
-
-                if (useGoogleColors && googleColorMode == "DOT") {
-                    views.setInt(R.id.iv_marker, "setColorFilter", event.color)
+                    views.setViewVisibility(R.id.iv_marker, View.VISIBLE)
+                    views.setImageViewResource(R.id.iv_marker, res)
+                    views.setInt(R.id.iv_marker, "setColorFilter", look.markerColor)
                 } else {
-                    views.setInt(R.id.iv_marker, "setColorFilter", 0)
+                    views.setViewVisibility(R.id.iv_marker, View.GONE)
                 }
 
-                // 3. Text Colors
-                val titleColor = if (isFadeEnabled) {
-                    when (item.eventIndex) {
-                        0 -> Color.parseColor("#FFFFFF")
-                        1 -> Color.parseColor("#E0E0E0")
-                        2 -> Color.parseColor("#BCBCBC")
-                        3 -> Color.parseColor("#8E8E8E")
-                        else -> Color.parseColor("#606060")
-                    }
-                } else {
-                    Color.parseColor("#FFFFFF")
-                }
-
-                val subColor = if (isFadeEnabled) {
-                    when (item.eventIndex) {
-                        0 -> Color.parseColor("#A8A8A8")
-                        1 -> Color.parseColor("#909090")
-                        2 -> Color.parseColor("#787878")
-                        3 -> Color.parseColor("#5A5A5A")
-                        else -> Color.parseColor("#444444")
-                    }
-                } else {
-                    Color.parseColor("#9E9E9E")
-                }
-
-                views.setTextColor(R.id.tv_title, titleColor)
-                views.setTextColor(R.id.tv_subtitle, subColor)
-
+                // 3. Text
+                views.setTextColor(R.id.tv_title, look.title)
+                views.setTextColor(R.id.tv_subtitle, look.sub)
                 views.setTextViewText(R.id.tv_title, event.title)
                 views.setTextViewText(
                     R.id.tv_subtitle,
@@ -193,24 +190,19 @@ private class NothingViewsFactory(private val context: Context) : RemoteViewsSer
         }
     }
 
-    private fun getFadeColor(baseColor: Int, targetColor: Int, index: Int): Int {
-        val fraction = (index.coerceIn(0, 4) / 4f)
-        val r = (Color.red(baseColor) + fraction * (Color.red(targetColor) - Color.red(baseColor))).toInt().coerceIn(0, 255)
-        val g = (Color.green(baseColor) + fraction * (Color.green(targetColor) - Color.green(baseColor))).toInt().coerceIn(0, 255)
-        val b = (Color.blue(baseColor) + fraction * (Color.blue(targetColor) - Color.blue(baseColor))).toInt().coerceIn(0, 255)
-        return Color.rgb(r, g, b)
-    }
-
-    private fun getGoogleBoxTintColor(color: Int, index: Int, fade: Boolean): Int {
-        val factor = if (!fade) 0.22f else maxOf(0.04f, 0.26f - (index * 0.05f))
-        val r = (Color.red(color) * factor).toInt().coerceIn(0, 255)
-        val g = (Color.green(color) * factor).toInt().coerceIn(0, 255)
-        val b = (Color.blue(color) * factor).toInt().coerceIn(0, 255)
-        return Color.rgb(r, g, b)
-    }
-
     override fun getLoadingView(): RemoteViews? = null
     override fun getViewTypeCount(): Int = 3
-    override fun getItemId(position: Int): Long = position.toLong()
-    override fun hasStableIds(): Boolean = false
+
+    override fun getItemId(position: Int): Long {
+        val items = snapshot.items
+        if (position < 0 || position >= items.size) return position.toLong()
+        return when (val item = items[position]) {
+            is TimelineListItem.Header -> Objects.hash("H", item.title).toLong()
+            is TimelineListItem.Divider -> Objects.hash("D").toLong()
+            is TimelineListItem.EventItem ->
+                Objects.hash("E", item.event.eventId, item.event.startTime).toLong()
+        }
+    }
+
+    override fun hasStableIds(): Boolean = true
 }

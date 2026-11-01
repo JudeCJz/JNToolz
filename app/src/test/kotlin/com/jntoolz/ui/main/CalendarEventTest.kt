@@ -1,6 +1,6 @@
-package com.example.nothingcalendar.ui.main
+package com.jntoolz.ui.main
 
-import com.example.nothingcalendar.data.CalendarEvent
+import com.jntoolz.data.CalendarEvent
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -18,7 +18,7 @@ class CalendarEventTest {
             color = 0,
             calendarDisplayName = "Holidays"
         )
-        assertEquals("ALL DAY", event.getFormattedTime())
-        assertEquals("ALL DAY", event.getFormattedStartTime())
+        assertEquals("All day", event.getFormattedTime())
+        assertEquals("All day", event.getFormattedStartTime())
     }
 }

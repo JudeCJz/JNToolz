@@ -1,6 +1,7 @@
 package com.jntoolz.data
 
 import android.content.Context
+import android.util.Log
 import android.content.Intent
 import android.widget.Toast
 import androidx.core.content.FileProvider
@@ -167,7 +168,7 @@ object UpdateChecker {
             }
             Result.success(Unit)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w("UpdateChecker", "update step failed: $e")
             Result.failure(e)
         }
     }
@@ -185,7 +186,7 @@ object UpdateChecker {
             }
             context.startActivity(intent)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w("UpdateChecker", "update step failed: $e")
             Toast.makeText(context, "Installation error: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }

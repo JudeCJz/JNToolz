@@ -2,34 +2,50 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/widget_border_nothing"
-    android:clipToOutline="true"
-    android:paddingStart="14dp"
-    android:paddingEnd="14dp"
-    android:paddingTop="14dp"
-    android:paddingBottom="14dp">
+    android:layout_height="match_parent">
 
-    <!-- Scrollable Events List -->
-    <ListView
-        android:id="@+id/lv_events"
+    <!-- Tinted rounded background (color + alpha set from the provider) -->
+    <ImageView
+        android:id="@+id/iv_widget_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:divider="@null"
-        android:dividerHeight="0dp"
-        android:scrollbars="none"
-        android:overScrollMode="never" />
+        android:src="@drawable/widget_bg_rounded"
+        android:scaleType="fitXY"
+        android:importantForAccessibility="no" />
 
-    <!-- Empty State -->
-    <TextView
-        android:id="@+id/tv_empty"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:text="No upcoming events"
-        android:textColor="#8E8E8E"
-        android:textSize="12sp"
-        android:fontFamily="monospace"
-        android:visibility="gone" />
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp">
+
+        <!-- Scrollable Events List -->
+        <ListView
+            android:id="@+id/lv_events"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="@null"
+            android:dividerHeight="0dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="14dp"
+            android:clipToPadding="false"
+            android:requiresFadingEdge="vertical"
+            android:fadingEdgeLength="20dp"
+            android:scrollbars="none"
+            android:overScrollMode="never" />
+
+        <!-- Empty State -->
+        <TextView
+            android:id="@+id/tv_empty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="No upcoming events"
+            android:textColor="#8E8E8E"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:visibility="gone" />
+
+    </FrameLayout>
 
 </FrameLayout>

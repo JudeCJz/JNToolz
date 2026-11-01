@@ -14,7 +14,7 @@ Installing JNToolz on your phone (or a friend's phone) takes less than 1 minute.
 
 ### Step 1: Download the APK
 1. Open your mobile browser and navigate to the **[Latest Release](https://github.com/JudeCJz/JNToolz/releases/latest)**.
-2. Under **Assets**, tap **`JNToolz-v1.0.0.apk`** to download it.
+2. Under **Assets**, tap **`JNToolz-v1.0.3.apk`** to download it.
 
 ### Step 2: Install the App
 1. When download completes, tap the notification or open your **Files** / **Downloads** app and tap the APK file.
@@ -25,12 +25,11 @@ Installing JNToolz on your phone (or a friend's phone) takes less than 1 minute.
 3. Tap **Install**.
    > *Note on Play Protect*: If Play Protect displays *"Unrecognized app details"*, tap **More details** ➔ **Install anyway** (standard for open-source self-built GitHub APKs).
 
-### Step 3: Grant Calendar Permission & Sync
-1. Open **JNToolz** from your app drawer.
-2. Tap on the **Calendar** tool card.
-3. When prompted, tap **Allow** for the Calendar permission so the app can securely read your device's synced calendar events.
-4. Tap **SYNC GOOGLE ACCOUNTS NOW** to immediately detect all your connected Google accounts and calendars.
-5. *(Optional)* Tap on any account dropdown to customize which individual calendars appear in the widget.
+### Step 3: Grant Calendar Permission
+1. Open **JNToolz** and tap the **Calendar** tool card.
+2. Tap **Allow** for the Calendar permission so the app can read your device's synced calendar events (read-only).
+3. Choose which calendars appear in the widget from the per-account lists.
+4. *(Optional)* **Link your Google account** (read-only) to get Google's calendar and event colours. The app is not yet verified by Google, so sign-in shows a warning: tap **Advanced** then **Go to JNToolz**.
 
 ### Step 4: Add the Widget to Your Home Screen
 * **Method 1 (Fastest)**: Inside the Calendar screen in JNToolz, simply tap the **`+ ADD SCROLLABLE WIDGET`** button at the top, then tap **Add to Home screen**.
@@ -43,27 +42,25 @@ Installing JNToolz on your phone (or a friend's phone) takes less than 1 minute.
 
 ---
 
-## ⚡ Features & Modules
+## ⚡ Features
 
-### 📅 Calendar & Agenda Widget
-- **Pure AMOLED Black (`#000000`)**: Zero background battery drain, designed to seamlessly blend with Nothing OS dark backgrounds.
-- **Dynamic 5-Tier Opacity Decay**: The top event begins with a subtle slate card (`#202121`) and gradually fades into complete AMOLED black (`#000000`) for older events.
-- **Collapsible Google Account Dropdowns**: Clean overview showing active calendar counts (e.g. `1 of 9 calendars active`), with expandable checkboxes per calendar.
-- **Nothing OS Typography**: Minimal letter-spaced uppercase headers (`U P C O M I N G`), hollow timeline markers, and native squircle rounding.
-- **100% Offline & Autonomous**: Operates via Android's native `CalendarContract` ContentProvider. No background services, no battery drain, and **works permanently with USB/Wireless debugging turned off**.
-- **Tap to Open**: Tapping any event card immediately launches Google Calendar directly to that date.
+### Calendar & Agenda Widget
+- **Scrollable widget** with pull to refresh; tap an event card to open Google Calendar on that date.
+- **Pure AMOLED black** background suited to Nothing OS.
+- **Colours**: tap any card in the in-app preview to set a colour per event or per calendar label.
+- **Marker styles**: OFF, DOT, RING, BAR or CARD.
+- **Card fade modes**: Gradient, Dim or Fade.
+- **Per-calendar selection** grouped by Google account.
+- Reads events on-device through Android's `CalendarContract`. The optional Google account link is read-only and only used for colours.
 
-### 🔄 In-App GitHub Auto-Updater
-- Checks for new releases directly from this repository upon launch.
-- Displays the current version tag (`v1.0`) on the hub dashboard.
-- Features an animated **glowing Nothing-red update pill** at the bottom-right when a new version is available.
-- Displays complete changelogs (fixes, patches, features) with one-tap download and relaunch patch summaries.
+### In-App Updater
+- Checks this repository's GitHub releases on launch and shows an update pill when a newer version exists.
+- Downloads the APK and hands it to the system installer (you confirm the install).
 
 ---
 
-## 🔒 Privacy & Battery Efficiency
-- **No Background Services**: No persistent background daemons running in the RAM. Updates are triggered on-demand by system calendar provider broadcasts (`PROVIDER_CHANGED`) and standard OS time changes.
-- **Privacy First**: Calendar data is queried locally on-device. Events never leave your phone.
+## 🔒 Privacy
+Calendar data stays on your device. See [PRIVACY.md](PRIVACY.md) for details.
 
 ---
 
@@ -72,6 +69,6 @@ Installing JNToolz on your phone (or a friend's phone) takes less than 1 minute.
 ```bash
 git clone https://github.com/JudeCJz/JNToolz.git
 cd JNToolz
-./gradlew assembleDebug
+./gradlew assembleRelease
 ```
-The output APK will be generated at `app/build/outputs/apk/debug/app-debug.apk`.
+The output APK is `app/build/outputs/apk/release/JNToolz-v1.0.3.apk` (R8-minified; signed with the debug keystore so updates install over earlier builds).

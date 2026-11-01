@@ -1,5 +1,6 @@
 package com.jntoolz.ui.hub
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -38,6 +39,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -66,7 +70,9 @@ import com.jntoolz.data.ReleaseInfo
 import com.jntoolz.data.UpdateChecker
 import com.jntoolz.data.WidgetPreferences
 import com.jntoolz.widget.WidgetUpdater
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val BgScreen = Color(0xFF000000)
 private val CardBg = Color(0xFF141414)
@@ -75,6 +81,11 @@ private val TextWhite = Color(0xFFFFFFFF)
 private val MutedGrey = Color(0xFF8E8E8E)
 private val AccentRed = Color(0xFFFF2E2E)
 private val BorderGrey = Color(0xFF222222)
+
+private fun openInBrowser(context: Context, url: String) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
+    runCatching { context.startActivity(intent) }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,16 +106,21 @@ fun HubScreen(
     var isDownloading by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableStateOf(0f) }
 
+    // Runs the update check (network work happens on IO inside UpdateChecker); never leaves the spinner stuck
+    suspend fun checkUpdates(): ReleaseInfo? {
+        isCheckingUpdate = true
+        return try {
+            UpdateChecker.checkForUpdates(context).also { releaseInfo = it }
+        } finally {
+            isCheckingUpdate = false
+        }
+    }
+
     // Check on every open whether an update or new version notes should appear
     LaunchedEffect(Unit) {
-        if (prefs.lastSeenVersion.isNotEmpty() && prefs.lastSeenVersion != currentVersion) {
-            showWhatsNewDialog = true
-        }
-
-        isCheckingUpdate = true
-        val info = UpdateChecker.checkForUpdates(context)
-        releaseInfo = info
-        isCheckingUpdate = false
+        val seen = withContext(Dispatchers.IO) { prefs.lastSeenVersion }
+        if (seen.isNotEmpty() && seen != currentVersion) showWhatsNewDialog = true
+        checkUpdates()
     }
 
     // Glowing animation when an update is available
@@ -133,37 +149,50 @@ fun HubScreen(
                                 .clip(RoundedCornerShape(8.dp))
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Row(
-                            verticalAlignment = Alignment.Bottom
-                        ) {
-                            Text(
-                                text = "JNTOOLZ",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                letterSpacing = 2.sp,
-                                color = TextWhite
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "v$currentVersion",
-                                fontSize = 10.sp,
-                                fontFamily = FontFamily.Monospace,
-                                letterSpacing = 0.5.sp,
-                                color = MutedGrey,
-                                modifier = Modifier.padding(bottom = 2.dp)
-                            )
-                        }
+                        Text(
+                            text = "JNTOOLZ",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 2.sp,
+                            color = TextWhite,
+                            modifier = Modifier.alignByBaseline()
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = currentVersion,
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = MutedGrey,
+                            modifier = Modifier.alignByBaseline()
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BgScreen)
             )
         }
     ) { innerPadding ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isCheckingUpdate,
+            onRefresh = {
+                coroutineScope.launch {
+                    val info = checkUpdates()
+                    withContext(Dispatchers.IO) { WidgetUpdater.updateAllWidgets(context) }
+                    if (info?.hasUpdate == true) showUpdateDialog = true
+                }
+            },
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(innerPadding),
+            indicator = {
+                PullToRefreshDefaults.Indicator(
+                    state = rememberPullToRefreshState(),
+                    isRefreshing = isCheckingUpdate,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    containerColor = CardBg,
+                    color = AccentRed
+                )
+            }
         ) {
             LazyColumn(
                 modifier = Modifier
@@ -212,13 +241,6 @@ fun HubScreen(
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.Monospace
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = if (isCalendarEnabled) "Enabled • Tap to configure" else "Disabled",
-                                    color = if (isCalendarEnabled) MutedGrey else AccentRed,
-                                    fontSize = 11.5.sp,
-                                    fontFamily = FontFamily.Monospace
-                                )
                             }
 
                             Spacer(modifier = Modifier.width(12.dp))
@@ -228,14 +250,16 @@ fun HubScreen(
                                 checked = isCalendarEnabled,
                                 onCheckedChange = { checked ->
                                     isCalendarEnabled = checked
-                                    prefs.isCalendarToolEnabled = checked
-                                    WidgetUpdater.updateAllWidgets(context)
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        prefs.isCalendarToolEnabled = checked
+                                        WidgetUpdater.updateAllWidgets(context)
+                                    }
                                 },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = TextWhite,
                                     checkedTrackColor = AccentRed,
                                     uncheckedThumbColor = MutedGrey,
-                                    uncheckedTrackColor = Color(0xFF222222)
+                                    uncheckedTrackColor = BorderGrey
                                 )
                             )
                         }
@@ -255,11 +279,8 @@ fun HubScreen(
                             showUpdateDialog = true
                         } else {
                             coroutineScope.launch {
-                                isCheckingUpdate = true
-                                val info = UpdateChecker.checkForUpdates(context)
-                                releaseInfo = info
-                                isCheckingUpdate = false
-                                if (info.hasUpdate) {
+                                val info = checkUpdates()
+                                if (info?.hasUpdate == true) {
                                     showUpdateDialog = true
                                 } else {
                                     Toast.makeText(context, "JNToolz v$currentVersion is up to date!", Toast.LENGTH_SHORT).show()
@@ -269,7 +290,7 @@ fun HubScreen(
                     },
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (hasUpdate) Color(0xFF1F0808) else Color(0xFF141414)
+                    containerColor = if (hasUpdate) Color(0xFF1F0808) else CardBg
                 ),
                 border = BorderStroke(
                     width = if (hasUpdate) 1.5.dp else 1.dp,
@@ -315,8 +336,8 @@ fun HubScreen(
     }
 
     // In-App Update Dialog
-    if (showUpdateDialog && releaseInfo != null) {
-        val info = releaseInfo!!
+    val info = releaseInfo
+    if (showUpdateDialog && info != null) {
         AlertDialog(
             onDismissRequest = {
                 if (!isDownloading) showUpdateDialog = false
@@ -396,17 +417,11 @@ fun HubScreen(
                                 isDownloading = false
                                 if (!result.isSuccess) {
                                     Toast.makeText(context, "Direct download failed, opening browser...", Toast.LENGTH_SHORT).show()
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.htmlUrl)).apply {
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                    }
-                                    context.startActivity(intent)
+                                    openInBrowser(context, info.htmlUrl)
                                 }
                             }
                         } else {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.htmlUrl)).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                            }
-                            context.startActivity(intent)
+                            openInBrowser(context, info.htmlUrl)
                         }
                     },
                     shape = RoundedCornerShape(12.dp),

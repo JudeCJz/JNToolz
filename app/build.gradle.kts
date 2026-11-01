@@ -11,13 +11,17 @@ android {
     applicationId = "com.jntoolz"
     minSdk = 26
     targetSdk = 36
-    versionCode = 3
-    versionName = "1.0.2"
+    versionCode = 4
+    versionName = "1.0.3"
   }
 
   buildTypes {
     release {
-      isMinifyEnabled = false
+      isMinifyEnabled = true
+      isShrinkResources = true
+      // Debug keystore on purpose: Google OAuth is registered for the debug SHA-1 and
+      // updates must install over earlier debug-signed releases.
+      signingConfig = signingConfigs.getByName("debug")
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
     }
   }
@@ -43,6 +47,16 @@ kotlin {
   jvmToolchain(17)
 }
 
+androidComponents {
+  onVariants { variant ->
+    variant.outputs.forEach { output ->
+      val name = android.defaultConfig.versionName
+      (output as? com.android.build.api.variant.impl.VariantOutputImpl)
+        ?.outputFileName?.set("JNToolz-v$name.apk")
+    }
+  }
+}
+
 dependencies {
   val composeBom = platform(libs.androidx.compose.bom)
   implementation(composeBom)
@@ -50,7 +64,7 @@ dependencies {
 
   // Core Android dependencies
   implementation(libs.androidx.core.ktx)
-  implementation(libs.androidx.lifecycle.runtime.ktx)
+  implementation(libs.play.services.auth)
   implementation(libs.androidx.activity.compose)
 
   // Arch Components
@@ -59,7 +73,6 @@ dependencies {
 
   // Compose
   implementation(libs.androidx.compose.ui)
-  implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.compose.material3)
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
@@ -78,7 +91,5 @@ dependencies {
   androidTestImplementation(libs.androidx.test.espresso.core)
 
   // Navigation
-  implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
-  implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 }
