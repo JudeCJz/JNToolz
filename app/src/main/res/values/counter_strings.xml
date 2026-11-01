@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="counter_widget_name">Counter</string>
+    <string name="counter_widget_description">Days left to a date</string>
+    <string name="counter_preview_title">TRIP</string>
+    <string name="counter_preview_number">24</string>
+    <string name="counter_days_left">DAYS LEFT</string>
+</resources>

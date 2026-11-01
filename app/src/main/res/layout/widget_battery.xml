@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Battery graph widget: a tinted rounded background and the whole face as one bitmap. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/battery_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/battery_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/battery_widget_bg"
+        android:tint="#000000"
+        android:importantForAccessibility="no" />
+
+    <ImageView
+        android:id="@+id/battery_graph"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:contentDescription="@string/battery_widget_name" />
+
+</FrameLayout>

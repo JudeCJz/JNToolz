@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="battery_widget_name">Battery graph</string>
+    <string name="battery_widget_description">Battery level over time</string>
+    <string name="battery_preview_small">4h 12m on</string>
+    <string name="battery_preview_big">78%</string>
+    <string name="battery_preview_label">Battery (24h)</string>
+</resources>

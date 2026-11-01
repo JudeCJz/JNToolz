@@ -57,6 +57,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -69,6 +70,9 @@ import com.jntoolz.R
 import com.jntoolz.data.ReleaseInfo
 import com.jntoolz.data.UpdateChecker
 import com.jntoolz.data.WidgetPreferences
+import com.jntoolz.tools.Tool
+import com.jntoolz.tools.Tools
+import com.jntoolz.ui.counter.CounterHubCard
 import com.jntoolz.widget.WidgetUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -82,6 +86,9 @@ private val MutedGrey = Color(0xFF8E8E8E)
 private val AccentRed = Color(0xFFFF2E2E)
 private val BorderGrey = Color(0xFF222222)
 
+/** Logo and title of a switched-off tool. */
+internal const val OFF_ALPHA = 0.4f
+
 private fun openInBrowser(context: Context, url: String) {
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
     runCatching { context.startActivity(intent) }
@@ -90,12 +97,15 @@ private fun openInBrowser(context: Context, url: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HubScreen(
-    onOpenCalendar: () -> Unit
+    onOpenCalendar: () -> Unit,
+    onOpenSot: () -> Unit,
+    onOpenCounter: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val prefs = remember { WidgetPreferences(context) }
-    var isCalendarEnabled by remember { mutableStateOf(prefs.isCalendarToolEnabled) }
+    var isCalendarEnabled by remember { mutableStateOf(Tools.isEnabled(context, Tool.CALENDAR)) }
+    var isSotEnabled by remember { mutableStateOf(Tools.isEnabled(context, Tool.BATTERY)) }
 
     val currentVersion = remember { UpdateChecker.getCurrentVersionName(context) }
     var releaseInfo by remember { mutableStateOf<ReleaseInfo?>(null) }
@@ -223,7 +233,8 @@ fun HubScreen(
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .clickable { onOpenCalendar() }
+                                    .alpha(if (isCalendarEnabled) 1f else OFF_ALPHA)
+                                    .clickable(enabled = isCalendarEnabled) { onOpenCalendar() }
                             )
 
                             Spacer(modifier = Modifier.width(16.dp))
@@ -232,7 +243,8 @@ fun HubScreen(
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clickable { onOpenCalendar() }
+                                    .alpha(if (isCalendarEnabled) 1f else OFF_ALPHA)
+                                    .clickable(enabled = isCalendarEnabled) { onOpenCalendar() }
                             ) {
                                 Text(
                                     text = "Calendar",
@@ -250,10 +262,7 @@ fun HubScreen(
                                 checked = isCalendarEnabled,
                                 onCheckedChange = { checked ->
                                     isCalendarEnabled = checked
-                                    coroutineScope.launch(Dispatchers.IO) {
-                                        prefs.isCalendarToolEnabled = checked
-                                        WidgetUpdater.updateAllWidgets(context)
-                                    }
+                                    Tools.setEnabled(context, Tool.CALENDAR, checked)
                                 },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = TextWhite,
@@ -265,6 +274,72 @@ fun HubScreen(
                         }
                     }
                 }
+
+                // Battery (screen-on time) Card
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp)),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = CardBg),
+                        border = BorderStroke(1.dp, BorderGrey)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_sot_logo),
+                                contentDescription = "Battery",
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .alpha(if (isSotEnabled) 1f else OFF_ALPHA)
+                                    .clickable(enabled = isSotEnabled) { onOpenSot() }
+                            )
+
+                            Spacer(modifier = Modifier.width(16.dp))
+
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .alpha(if (isSotEnabled) 1f else OFF_ALPHA)
+                                    .clickable(enabled = isSotEnabled) { onOpenSot() }
+                            ) {
+                                Text(
+                                    text = "Battery",
+                                    color = TextWhite,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            // Enable / Disable Switch: starts or stops battery tracking
+                            Switch(
+                                checked = isSotEnabled,
+                                onCheckedChange = { checked ->
+                                    isSotEnabled = checked
+                                    Tools.setEnabled(context, Tool.BATTERY, checked)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = TextWhite,
+                                    checkedTrackColor = AccentRed,
+                                    uncheckedThumbColor = MutedGrey,
+                                    uncheckedTrackColor = BorderGrey
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // Counter App Card
+                item { CounterHubCard(onOpen = onOpenCounter) }
             }
 
             // Bottom-Right Update Pill Button

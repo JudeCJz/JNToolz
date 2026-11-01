@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Counter widget: the face is one bitmap (Material You themes: a tinted base + tinted overlay mask).
+     The Chronometers tick on their own when shown; gravity / margins / sizes match ClockSlot in CounterLayout.kt. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/counter_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/counter_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/counter_widget_placeholder"
+        android:contentDescription="@string/counter_widget_name" />
+
+    <ImageView
+        android:id="@+id/counter_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
+    <!-- ClockSlot.BOTTOM: square layout, bottom-left under the label -->
+    <Chronometer
+        android:id="@+id/counter_clock_center"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="12dp"
+        android:fontFamily="sans-serif-medium"
+        android:fontFeatureSettings="tnum"
+        android:includeFontPadding="true"
+        android:maxLines="1"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+    <!-- ClockSlot.END: one-row layout, right edge, vertically centred -->
+    <Chronometer
+        android:id="@+id/counter_clock_end"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical|end"
+        android:layout_marginEnd="16dp"
+        android:fontFamily="sans-serif-medium"
+        android:fontFeatureSettings="tnum"
+        android:includeFontPadding="true"
+        android:maxLines="1"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        android:visibility="gone" />
+
+    <!-- ClockSlot.TALL: narrow layout, bottom-left under the label -->
+    <Chronometer
+        android:id="@+id/counter_clock_tall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="12dp"
+        android:layout_marginBottom="8dp"
+        android:fontFamily="sans-serif-medium"
+        android:fontFeatureSettings="tnum"
+        android:includeFontPadding="true"
+        android:maxLines="1"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+</FrameLayout>
