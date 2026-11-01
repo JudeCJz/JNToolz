@@ -132,21 +132,25 @@ fun HubScreen(
                                 .clip(RoundedCornerShape(8.dp))
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column {
+                        Row(
+                            verticalAlignment = Alignment.Bottom
+                        ) {
                             Text(
                                 text = "JNTOOLZ",
-                                fontSize = 17.sp,
+                                fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
                                 letterSpacing = 2.sp,
                                 color = TextWhite
                             )
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "v$currentVersion",
                                 fontSize = 10.sp,
                                 fontFamily = FontFamily.Monospace,
-                                letterSpacing = 1.sp,
-                                color = MutedGrey
+                                letterSpacing = 0.5.sp,
+                                color = MutedGrey,
+                                modifier = Modifier.padding(bottom = 2.dp)
                             )
                         }
                     }
