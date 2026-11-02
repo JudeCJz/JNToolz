@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.graphics.drawable.Icon
 import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.os.Build
@@ -232,7 +233,8 @@ class TrackerService : Service() {
 
     private fun notification(title: String, text: String?): Notification =
         Notification.Builder(this, CHANNEL)
-            .setSmallIcon(R.drawable.ic_sot_stat)
+            .setSmallIcon(R.drawable.ic_stat_jntoolz)
+            .setLargeIcon(Icon.createWithResource(this, R.drawable.ic_sot_stat))
             .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(open)

@@ -18,8 +18,6 @@ data class CounterDisplay(
     val label: String,
     /** Millis until the target moment, only when the counter has a time and it is still ahead. */
     val millisToTarget: Long?,
-    /** 0..1 from the counter's creation day to the target day. */
-    val progress: Float,
 ) {
     enum class Phase { FUTURE, TODAY, PAST }
 }
@@ -30,7 +28,6 @@ object CounterMath {
     fun display(
         target: LocalDate,
         time: LocalTime?,
-        created: LocalDate,
         now: ZonedDateTime,
     ): CounterDisplay {
         val today = now.toLocalDate()
@@ -51,19 +48,12 @@ object CounterMath {
             val at = targetMoment(target, t, now.zone)
             Duration.between(now, at).toMillis().takeIf { it > 0 }
         }
-        return CounterDisplay(phase, days, number, label, millis, progress(created, target, today))
+        return CounterDisplay(phase, days, number, label, millis)
     }
 
     /** The target as a moment in [zone]; a time inside a DST gap moves forward like ZonedDateTime does. */
     fun targetMoment(target: LocalDate, time: LocalTime, zone: ZoneId): ZonedDateTime =
         ZonedDateTime.of(target, time, zone)
-
-    fun progress(created: LocalDate, target: LocalDate, today: LocalDate): Float {
-        val total = ChronoUnit.DAYS.between(created, target)
-        if (total <= 0) return if (today >= target) 1f else 0f
-        val done = ChronoUnit.DAYS.between(created, today)
-        return (done.toFloat() / total).coerceIn(0f, 1f)
-    }
 
     /** Start of the next local day, the moment every counter's day count changes. */
     fun nextMidnight(now: ZonedDateTime): ZonedDateTime =

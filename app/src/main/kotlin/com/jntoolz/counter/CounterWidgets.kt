@@ -6,7 +6,6 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.SystemClock
 import android.view.View
 import android.widget.RemoteViews
@@ -94,15 +93,8 @@ object CounterWidgets {
 
         val views = RemoteViews(context.packageName, R.layout.widget_counter)
         views.setImageViewBitmap(R.id.counter_image, face.bitmap)
-        WidgetKit.tint(views, R.id.counter_image, face.baseTintRes, face.baseTint ?: 0)
-        val overlay = face.overlay
-        if (overlay != null) {
-            views.setViewVisibility(R.id.counter_overlay, View.VISIBLE)
-            views.setImageViewBitmap(R.id.counter_overlay, overlay)
-            WidgetKit.tint(views, R.id.counter_overlay, face.overlayTintRes, face.overlayTint ?: 0)
-        } else {
-            views.setViewVisibility(R.id.counter_overlay, View.GONE)
-        }
+        WidgetKit.tint(views, R.id.counter_image, 0, 0) // full-colour bitmap; clears a tint from older versions
+        views.setViewVisibility(R.id.counter_overlay, View.GONE)
         views.setContentDescription(
             R.id.counter_image,
             when {
@@ -120,12 +112,7 @@ object CounterWidgets {
         }
         if (shown != null && clockMs != null) {
             views.setViewVisibility(shown, View.VISIBLE)
-            if (face.clockColorRes != 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                // Resolved by the launcher at apply time, so it follows the wallpaper.
-                views.setColorStateList(shown, "setTextColor", face.clockColorRes)
-            } else {
-                views.setTextColor(shown, face.clockColor)
-            }
+            views.setTextColor(shown, face.clockColor)
             // Counting down to base: it ticks by itself, no app wakeups.
             views.setChronometer(shown, SystemClock.elapsedRealtime() + clockMs, null, true)
             views.setChronometerCountDown(shown, true)

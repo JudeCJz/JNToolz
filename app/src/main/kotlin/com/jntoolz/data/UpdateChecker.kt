@@ -29,11 +29,12 @@ object UpdateChecker {
     const val GITHUB_REPO_URL = "https://github.com/$REPO_OWNER/$REPO_NAME"
 
     val CURRENT_VERSION_CHANGELOG = """
-        • In-App Direct APK Downloader & Installer
-        • Google Calendar Event Color Sync (Dot Markers or Entire Card)
-        • Theme Section: Custom Background, Distance Fade & Gradient Cards
-        • Compact 4x2 Grid Typography (Single-line headers & sub-items)
-        • Relocated Google Sync action under Google Calendars
+        • Unscroll: Smart anti-doomscroll tool with customizable target apps & humorous Hard Mode unlock
+        • Hardware Telemetry: Accurate live detection of phone model (Nothing Phone (4a) Pro), OS build, battery design capacity, health %, and physical device age with charge cycles
+        • Battery Graph Export: Comprehensive clipboard export with prepended device hardware specifications
+        • Status Bar Icon: Clean monochrome JNToolz logo in status bar, full battery icon in notification shade
+        • Hub Screen: Unified red/dark segmented ON/OFF toggles across all tools
+        • Counter Editor: Height stabilization when toggling gradient & card styles with smooth animations
     """.trimIndent()
 
     fun getCurrentVersionName(context: Context): String {

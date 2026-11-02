@@ -29,6 +29,14 @@
 
     <queries>
         <package android:name="com.android.settings" />
+        <!-- Unscroll: show switches only for installed apps -->
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.instagram.android" />
+        <package android:name="com.facebook.katana" />
+        <package android:name="com.zhiliaoapp.musically" />
+        <package android:name="com.ss.android.ugc.trill" />
+        <package android:name="com.reddit.frontpage" />
+        <package android:name="com.linkedin.android" />
     </queries>
 
     <application
@@ -110,6 +118,17 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".widget.CalendarWidgetConfigureActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Material.NoActionBar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <!-- Battery: battery and screen tracker, started only while the tool is on -->
         <service
             android:name=".sot.TrackerService"
@@ -150,6 +169,20 @@
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>
         </activity>
+
+        <!-- Unscroll: accessibility service that leaves Shorts/Reels and warns on long scrolling; ignores events while the tool is off -->
+        <service
+            android:name=".unscroll.UnscrollService"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/unscroll_service" />
+        </service>
 
     </application>
 

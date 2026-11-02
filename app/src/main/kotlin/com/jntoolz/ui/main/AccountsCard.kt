@@ -82,7 +82,7 @@ private fun CalendarAccountRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = accountName,
-                    color = AccentRed,
+                    color = Color(0xFFE0E0E0),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
@@ -95,25 +95,29 @@ private fun CalendarAccountRow(
                     fontFamily = FontFamily.Monospace
                 )
             }
-            Text(
-                text = if (isLinked) "LINKED" else "LINK",
-                color = if (isLinked) TextWhite else AccentRed,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 1.sp,
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(if (isLinked) AccentRed else Color.Transparent)
-                    .border(1.dp, AccentRed, RoundedCornerShape(50))
+                    .background(if (isLinked) Color(0xFF222222) else AccentRed)
                     .clickable { onLinkToggle(accountName, isLinked) }
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            )
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (isLinked) "LINKED" else "LINK",
+                    color = if (isLinked) Color(0xFF8E8E8E) else TextWhite,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = if (isExpanded) "▲" else "▼",
-                color = MutedGrey,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(start = 8.dp)
+                color = Color(0xFF8E8E8E),
+                fontSize = 11.sp
             )
         }
 

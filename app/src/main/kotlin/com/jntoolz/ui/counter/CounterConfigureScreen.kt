@@ -1,6 +1,7 @@
 package com.jntoolz.ui.counter
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,11 +35,14 @@ fun CounterConfigureScreen(
     onClose: () -> Unit,
     /** Size of the widget being configured, when the launcher already reported it. */
     widgetSize: SizeDp? = null,
+    /** The counter this widget already shows: its editor opens straight away (CHANGE leads to the list). */
+    editing: Counter? = null,
 ) {
     val context = LocalContext.current
     val store = remember { CounterStore(context) }
     var counters by remember { mutableStateOf(store.all()) }
-    var adding by remember { mutableStateOf(counters.isEmpty()) }
+    var adding by remember { mutableStateOf(editing == null && counters.isEmpty()) }
+    var editingCounter by remember { mutableStateOf(editing) }
 
     Scaffold(
         containerColor = CounterColors.Bg,
@@ -63,7 +67,19 @@ fun CounterConfigureScreen(
                     color = CounterColors.Text,
                     modifier = Modifier.weight(1f)
                 )
-                AddButton { adding = true }
+                if (editingCounter != null) {
+                    Text(
+                        "CHANGE",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp,
+                        color = CounterColors.Text,
+                        modifier = Modifier.clickable { editingCounter = null }.padding(8.dp)
+                    )
+                } else {
+                    AddButton { adding = true }
+                }
                 Spacer(Modifier.width(12.dp))
             }
         }
@@ -77,10 +93,24 @@ fun CounterConfigureScreen(
         )
     }
 
+    editingCounter?.let { current ->
+        CounterEditorSheet(
+            initial = current,
+            onDismiss = { editingCounter = null },
+            // Reconfiguring a placed widget: APPLY saves and redraws it, the editor stays open.
+            onSave = {
+                store.save(it)
+                counters = store.all()
+                refreshWidgets(context)
+            }
+        )
+    }
+
     if (adding) {
         CounterEditorSheet(
             initial = null,
             onDismiss = { adding = false },
+            // A new counter is picked for this widget: APPLY saves it and finishes, so a new widget gets placed.
             onSave = {
                 store.save(it)
                 counters = store.all()

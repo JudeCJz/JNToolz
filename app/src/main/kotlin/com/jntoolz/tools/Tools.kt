@@ -13,6 +13,7 @@ import com.jntoolz.sot.SotTool
 import com.jntoolz.sot.Store
 import com.jntoolz.sot.TrackerService
 import com.jntoolz.sot.widget.BatteryWidgets
+import com.jntoolz.unscroll.UnscrollStore
 import com.jntoolz.widget.WidgetUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,6 +32,7 @@ enum class Tool(val id: String, val components: List<String>) {
         listOf(
             "com.jntoolz.widget.NothingCalendarWidgetProvider",
             "com.jntoolz.widget.NothingWidgetService",
+            "com.jntoolz.widget.CalendarWidgetConfigureActivity",
         )
     ),
     BATTERY(
@@ -48,6 +50,10 @@ enum class Tool(val id: String, val components: List<String>) {
             "com.jntoolz.counter.CounterWidgetProvider",
             "com.jntoolz.counter.CounterConfigureActivity",
         )
+    ),
+    UNSCROLL(
+        "unscroll",
+        listOf("com.jntoolz.unscroll.UnscrollService")
     );
 
     companion object {
@@ -72,6 +78,7 @@ object Tools {
         Tool.CALENDAR -> WidgetPreferences(c).isCalendarToolEnabled
         Tool.BATTERY -> SotTool.isEnabled(c)
         Tool.COUNTER -> CounterStore(c).enabled
+        Tool.UNSCROLL -> UnscrollStore(c).enabled
     }
 
     /**
@@ -80,6 +87,8 @@ object Tools {
      */
     fun setEnabled(c: Context, tool: Tool, on: Boolean) {
         val app = c.applicationContext
+        // Hard mode is only left through the typed unlock on the Unscroll hub card.
+        if (!on && tool == Tool.UNSCROLL && UnscrollStore(app).hard) return
         saveFlag(app, tool, on)
         scope.launch {
             if (on) {
@@ -109,6 +118,7 @@ object Tools {
             Tool.CALENDAR -> WidgetPreferences(c).isCalendarToolEnabled = on
             Tool.BATTERY -> SotTool.saveEnabled(c, on)
             Tool.COUNTER -> CounterStore(c).enabled = on
+            Tool.UNSCROLL -> UnscrollStore(c).enabled = on
         }
     }
 
@@ -117,6 +127,7 @@ object Tools {
             Tool.CALENDAR -> WidgetUpdater.updateAllWidgets(c)
             Tool.BATTERY -> TrackerService.start(c)
             Tool.COUNTER -> CounterWidgets.updateAll(c) // redraws and reschedules the midnight alarm
+            Tool.UNSCROLL -> Unit // the accessibility service reads the flag itself
         }
     }
 
@@ -139,6 +150,7 @@ object Tools {
                 val ids = CounterWidgets.ids(c)
                 if (ids.isNotEmpty()) CounterStore(c).removeWidgets(ids)
             }
+            Tool.UNSCROLL -> Unit // the service ignores events while the flag is off
         }
     }
 

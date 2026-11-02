@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -154,9 +155,23 @@ internal fun SotPage(scroll: ScrollState, content: @Composable ColumnScope.() ->
     )
 }
 
-/** The app's top bar: back arrow and a monospace bold caps title. */
+/** A section header: small muted monospace caps, as on the Calendar screen. */
 @Composable
-internal fun SotTopBar(title: String, onBack: () -> Unit) {
+internal fun SotSection(text: String) {
+    Text(
+        text = text,
+        color = SotColors.Dim,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        fontFamily = FontFamily.Monospace,
+        letterSpacing = 1.5.sp,
+        modifier = Modifier.padding(top = 8.dp)
+    )
+}
+
+/** The app's top bar: back arrow and a monospace bold caps title; with [onSettings], a gear at the right. */
+@Composable
+internal fun SotTopBar(title: String, onBack: () -> Unit, onSettings: (() -> Unit)? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -174,8 +189,34 @@ internal fun SotTopBar(title: String, onBack: () -> Unit) {
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
             letterSpacing = 2.sp,
-            color = SotColors.Txt
+            color = SotColors.Txt,
+            modifier = Modifier.weight(1f)
         )
+        if (onSettings != null) GearButton(onSettings)
+    }
+}
+
+/** Drawn settings gear: a ring with eight teeth. */
+@Composable
+private fun GearButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable { onClick() }
+            .semantics { contentDescription = "Settings" },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(24.dp)) {
+            val c = Offset(size.width / 2f, size.height / 2f)
+            val u = size.width / 24f
+            drawCircle(SotColors.Txt, 5.5f * u, c, style = Stroke(2f * u))
+            for (i in 0 until 8) {
+                val a = Math.toRadians(i * 45.0)
+                val d = Offset(Math.cos(a).toFloat(), Math.sin(a).toFloat())
+                drawLine(SotColors.Txt, c + d * (8f * u), c + d * (11f * u), 2.6f * u, StrokeCap.Round)
+            }
+        }
     }
 }
 
@@ -215,16 +256,23 @@ internal fun <T> Segmented(
     fill: Boolean = true,
     height: Dp = 36.dp
 ) {
-    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    val trackShape = RoundedCornerShape(12.dp)
+    val itemShape = RoundedCornerShape(10.dp)
+    Row(
+        modifier = modifier
+            .clip(trackShape)
+            .background(Color(0xFF1A1A1A))
+            .padding(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         for ((value, name) in options) {
             val on = value == selected
-            val shape = RoundedCornerShape(8.dp)
             Box(
                 modifier = (if (fill) Modifier.weight(1f) else Modifier)
                     .height(height)
-                    .clip(shape)
-                    .background(if (on) SotColors.Chip else Color.Transparent)
-                    .border(1.dp, if (on) SotColors.Red else SotColors.ChipBorder, shape)
+                    .clip(itemShape)
+                    .background(if (on) SotColors.Red else Color.Transparent)
                     .clickable { onPick(value) }
                     .semantics {
                         role = Role.Tab
@@ -235,7 +283,7 @@ internal fun <T> Segmented(
             ) {
                 Text(
                     text = name,
-                    color = if (on) SotColors.Txt else SotColors.Dim,
+                    color = if (on) Color.White else Color(0xFF8E8E8E),
                     fontSize = if (name.length > 10) 9.5.sp else 11.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,

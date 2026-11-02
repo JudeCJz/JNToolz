@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +31,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import com.jntoolz.ui.common.AddWidgetButton
+import com.jntoolz.ui.common.ApplyButton
+import com.jntoolz.ui.common.ApplyButtonClearance
+import com.jntoolz.ui.common.FitHeight
+import com.jntoolz.ui.common.PreviewBox
+import com.jntoolz.ui.common.pinnedPreviewMaxHeight
+import com.jntoolz.ui.common.applyButtonPadding
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
@@ -83,6 +95,7 @@ fun MainScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val theme by viewModel.theme.collectAsStateWithLifecycle()
+    val savedTheme by viewModel.savedTheme.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var pickerTarget by remember { mutableStateOf<PickerTarget?>(null) }
@@ -226,106 +239,126 @@ fun MainScreen(
             }
         }
     ) { innerPadding ->
-        PullToRefreshBox(
-            isRefreshing = uiState.isSyncing,
-            onRefresh = viewModel::syncGoogleAccounts,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            indicator = {
-                PullToRefreshDefaults.Indicator(
-                    state = rememberPullToRefreshState(),
-                    isRefreshing = uiState.isSyncing,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    containerColor = CardBg,
-                    color = AccentRed
-                )
-            }
-        ) {
-            LazyColumn(
-                modifier = Modifier
+        Box(Modifier.fillMaxSize()) {
+            // Like the Battery widget editor: the top bar and the live preview stay pinned, only the options scroll.
+            Column(
+                Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(innerPadding)
             ) {
-                if (!uiState.hasPermission) {
-                    item(key = "permission") {
-                        PermissionCard(onRequest = { permissionLauncher.launch(Manifest.permission.READ_CALENDAR) })
-                    }
-                }
-
-                item(key = "pin") {
-                    Button(
-                        onClick = { requestPinWidget(context, NothingCalendarWidgetProvider::class.java) },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = TextWhite, contentColor = BgScreen)
-                    ) {
-                        Text(
-                            text = "+ ADD WIDGET",
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
-                    }
-                }
-
-                item(key = "previewHeader") {
+                Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp)) {
                     Row(verticalAlignment = Alignment.Bottom) {
                         SectionHeader("PREVIEW")
                         Text(
                             text = "· tap a card to edit its color",
-                            color = MutedGrey.copy(alpha = 0.6f),
+                            color = Color(0xFF8E8E8E),
                             fontSize = 10.sp,
                             fontFamily = FontFamily.Monospace,
                             modifier = Modifier.padding(start = 8.dp, bottom = 5.dp)
                         )
                     }
-                }
-
-                item(key = "preview") {
-                    NothingWidgetPreviewCard(
-                        todayEvents = todayEvents,
-                        upcomingEvents = upcomingEvents,
-                        onEventClick = { eventPicker = it },
-                        theme = theme
-                    )
-                }
-
-                item(key = "themeHeader") { SectionHeader("THEME") }
-                item(key = "theme") {
-                    ThemeCard(
-                        theme = theme,
-                        onChange = viewModel::updateTheme,
-                        onPick = { pickerTarget = it }
-                    )
-                }
-
-                item(key = "googleHeader") { SectionHeader("GOOGLE CALENDARS") }
-                if (uiState.calendars.isEmpty()) {
-                    item(key = "noCalendars") {
-                        Text(
-                            text = "(No Google calendars detected yet)",
-                            color = MutedGrey,
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-                } else {
-                    item(key = "accounts") {
-                        CalendarAccountsCard(
-                            grouped = grouped,
-                            enabledIds = uiState.enabledCalendarIds,
-                            onToggle = viewModel::toggleCalendar,
-                            linked = uiState.linkedAccounts,
-                            onLinkToggle = onLinkToggle
-                        )
+                    // The box keeps its full width and corners; only the widget inside is scaled to the height cap.
+                    PreviewBox(padding = 12.dp) {
+                        FitHeight(pinnedPreviewMaxHeight() - 24.dp) {
+                            NothingWidgetPreviewCard(
+                                todayEvents = todayEvents,
+                                upcomingEvents = upcomingEvents,
+                                onEventClick = { eventPicker = it },
+                                theme = theme
+                            )
+                        }
                     }
                 }
+                HorizontalDivider(thickness = 1.dp, color = Color(0xFF222222))
+                PullToRefreshBox(
+                    isRefreshing = uiState.isSyncing,
+                    onRefresh = viewModel::syncGoogleAccounts,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        // The options (and their scrim) never draw up over the pinned preview box.
+                        .clipToBounds(),
+                    indicator = {
+                        PullToRefreshDefaults.Indicator(
+                            state = rememberPullToRefreshState(),
+                            isRefreshing = uiState.isSyncing,
+                            modifier = Modifier.align(Alignment.TopCenter),
+                            containerColor = CardBg,
+                            color = AccentRed
+                        )
+                    }
+                ) {
+                    Box(Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 20.dp),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = ApplyButtonClearance),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            if (!uiState.hasPermission) {
+                                item(key = "permission") {
+                                    PermissionCard(onRequest = { permissionLauncher.launch(Manifest.permission.READ_CALENDAR) })
+                                }
+                            }
 
-                item(key = "spacer") { Spacer(modifier = Modifier.height(30.dp)) }
+                            item(key = "pin") {
+                                AddWidgetButton(NothingCalendarWidgetProvider::class.java)
+                            }
+
+                            item(key = "themeHeader") { SectionHeader("THEME") }
+                            item(key = "theme") {
+                                ThemeCard(
+                                    theme = theme,
+                                    onChange = viewModel::updateTheme,
+                                    onPick = { pickerTarget = it }
+                                )
+                            }
+
+                            item(key = "googleHeader") { SectionHeader("GOOGLE CALENDARS") }
+                            if (uiState.calendars.isEmpty()) {
+                                item(key = "noCalendars") {
+                                    Text(
+                                        text = "(No Google calendars detected yet)",
+                                        color = MutedGrey,
+                                        fontSize = 12.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            } else {
+                                item(key = "accounts") {
+                                    CalendarAccountsCard(
+                                        grouped = grouped,
+                                        enabledIds = uiState.enabledCalendarIds,
+                                        onToggle = viewModel::toggleCalendar,
+                                        linked = uiState.linkedAccounts,
+                                        onLinkToggle = onLinkToggle
+                                    )
+                                }
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(12.dp)
+                                .align(Alignment.TopCenter)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(Color(0xFF000000), Color.Transparent)
+                                    )
+                                )
+                        )
+                    }
+                }
             }
+            // Theme edits are a draft (shown in the preview) until APPLY saves them and redraws the widgets.
+            ApplyButton(
+                dirty = theme != savedTheme,
+                onApply = viewModel::applyTheme,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .applyButtonPadding()
+            )
         }
     }
 }
@@ -334,11 +367,11 @@ fun MainScreen(
 private fun SectionHeader(text: String) {
     Text(
         text = text,
-        color = MutedGrey,
+        color = Color(0xFF777777),
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
         fontFamily = FontFamily.Monospace,
-        letterSpacing = 1.5.sp,
+        letterSpacing = 2.sp,
         modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
     )
 }
@@ -393,27 +426,5 @@ private fun PermissionCard(onRequest: () -> Unit) {
                 )
             }
         }
-    }
-}
-
-private fun requestPinWidget(context: Context, providerClass: Class<*>) {
-    val appWidgetManager = AppWidgetManager.getInstance(context)
-    val myProvider = ComponentName(context, providerClass)
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && appWidgetManager.isRequestPinAppWidgetSupported) {
-        val successCallback = PendingIntent.getBroadcast(
-            context,
-            0,
-            Intent(context, providerClass),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        appWidgetManager.requestPinAppWidget(myProvider, null, successCallback)
-        Toast.makeText(context, "Adding widget to home screen...", Toast.LENGTH_SHORT).show()
-    } else {
-        Toast.makeText(
-            context,
-            "Long-press your home screen and select JNToolz Events from widgets.",
-            Toast.LENGTH_LONG
-        ).show()
     }
 }

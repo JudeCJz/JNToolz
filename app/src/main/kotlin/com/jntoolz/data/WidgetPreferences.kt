@@ -7,6 +7,28 @@ class WidgetPreferences(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    init {
+        migrateGradientPreset()
+    }
+
+    /**
+     * One-time: a saved gradient preset becomes a plain gradient card (top = preset start, card colour =
+     * preset end, intensity 100, same angle), then the preset is cleared.
+     */
+    @Synchronized
+    private fun migrateGradientPreset() {
+        val preset = cardGradientStyle
+        val style = ThemeMath.migratePreset(preset, gradientAngle) ?: return
+        prefs.edit()
+            .putLong(KEY_CUSTOM_CARD_COLOR, style.color.toLong() and 0xFFFFFFFFL)
+            .putBoolean(KEY_GRADIENT_ON, true)
+            .putLong(KEY_GRADIENT_TOP, style.gradientTop.toLong() and 0xFFFFFFFFL)
+            .putInt(KEY_GRADIENT_INTENSITY, style.intensity)
+            .putInt(KEY_GRADIENT_ANGLE, style.angle)
+            .putString(KEY_CARD_GRADIENT, "NONE")
+            .apply()
+    }
+
     var hasCustomizedCalendars: Boolean
         get() = prefs.getBoolean(KEY_HAS_CUSTOM_CALENDARS, false)
         set(value) = prefs.edit().putBoolean(KEY_HAS_CUSTOM_CALENDARS, value).apply()
@@ -32,10 +54,6 @@ class WidgetPreferences(context: Context) {
         }
         set(value) = prefs.edit().putString(KEY_MARKER_STYLE, value).apply()
 
-    var isDimEnabled: Boolean
-        get() = prefs.getBoolean(KEY_DIM_ENABLED, false)
-        set(value) = prefs.edit().putBoolean(KEY_DIM_ENABLED, value).apply()
-
     var isFadeEnabled: Boolean
         get() = prefs.getBoolean(KEY_FADE_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_FADE_ENABLED, value).apply()
@@ -49,9 +67,29 @@ class WidgetPreferences(context: Context) {
         get() = prefs.getLong(KEY_CUSTOM_CARD_COLOR, 0xFF202121L)
         set(value) = prefs.edit().putLong(KEY_CUSTOM_CARD_COLOR, value).apply()
 
-    var cardGradientStyle: String // "NONE", "CHARCOAL", "RUBY", "CYBER"
+    /** Legacy gradient preset; only read by [migrateGradientPreset], always "NONE" afterwards. */
+    var cardGradientStyle: String
         get() = prefs.getString(KEY_CARD_GRADIENT, "NONE") ?: "NONE"
         set(value) = prefs.edit().putString(KEY_CARD_GRADIENT, value).apply()
+
+    /** Frosted glass widget background (default off); the event-card glass is [isGlassEnabled]. */
+    var isBgGlassEnabled: Boolean
+        get() = prefs.getBoolean(KEY_BG_GLASS, false)
+        set(value) = prefs.edit().putBoolean(KEY_BG_GLASS, value).apply()
+
+    /** How see-through the background glass is, 0..100 (see CardStyle.glassLevel). */
+    var bgGlassLevel: Int
+        get() = prefs.getInt(KEY_BG_GLASS_LEVEL, CardStyle.DEFAULT_GLASS_LEVEL).coerceIn(0, 100)
+        set(value) = prefs.edit().putInt(KEY_BG_GLASS_LEVEL, value.coerceIn(0, 100)).apply()
+
+    var isGlassEnabled: Boolean
+        get() = prefs.getBoolean(KEY_GLASS, false)
+        set(value) = prefs.edit().putBoolean(KEY_GLASS, value).apply()
+
+    /** How see-through the event-card glass is, 0..100. */
+    var glassLevel: Int
+        get() = prefs.getInt(KEY_GLASS_LEVEL, CardStyle.DEFAULT_GLASS_LEVEL).coerceIn(0, 100)
+        set(value) = prefs.edit().putInt(KEY_GLASS_LEVEL, value.coerceIn(0, 100)).apply()
 
     var markerColor: Long // 0 = automatic
         get() = prefs.getLong(KEY_MARKER_COLOR, 0L)
@@ -68,6 +106,10 @@ class WidgetPreferences(context: Context) {
     var gradientIntensity: Int // 0..100
         get() = prefs.getInt(KEY_GRADIENT_INTENSITY, 25)
         set(value) = prefs.edit().putInt(KEY_GRADIENT_INTENSITY, value).apply()
+
+    var gradientAngle: Int // 0..359, 0 = top to bottom
+        get() = prefs.getInt(KEY_GRADIENT_ANGLE, 0)
+        set(value) = prefs.edit().putInt(KEY_GRADIENT_ANGLE, value).apply()
 
     fun getEnabledCalendarIds(): Set<String> {
         return prefs.getStringSet(KEY_ENABLED_CALENDARS, emptySet()) ?: emptySet()
@@ -91,6 +133,25 @@ class WidgetPreferences(context: Context) {
         prefs.edit().putStringSet(KEY_ENABLED_CALENDARS, current).apply()
     }
 
+    fun saveTheme(theme: ThemeSettings) {
+        prefs.edit()
+            .putBoolean(KEY_USE_GOOGLE_COLORS, theme.useGoogleColors)
+            .putString(KEY_MARKER_STYLE, theme.markerStyle)
+            .putBoolean(KEY_FADE_ENABLED, theme.fade)
+            .putLong(KEY_CUSTOM_CARD_COLOR, theme.cardColor.toLong() and 0xFFFFFFFFL)
+            .putString(KEY_CARD_GRADIENT, theme.gradientStyle)
+            .putLong(KEY_MARKER_COLOR, theme.markerColor.toLong() and 0xFFFFFFFFL)
+            .putBoolean(KEY_GRADIENT_ON, theme.gradient)
+            .putLong(KEY_GRADIENT_TOP, theme.gradientTop.toLong() and 0xFFFFFFFFL)
+            .putInt(KEY_GRADIENT_INTENSITY, theme.gradientIntensity)
+            .putInt(KEY_GRADIENT_ANGLE, theme.gradientAngle)
+            .putBoolean(KEY_GLASS, theme.glass)
+            .putInt(KEY_GLASS_LEVEL, theme.glassLevel)
+            .putBoolean(KEY_BG_GLASS, theme.bgGlass)
+            .putInt(KEY_BG_GLASS_LEVEL, theme.bgGlassLevel)
+            .commit()
+    }
+
     fun isCalendarEnabled(calendar: CalendarInfo): Boolean {
         if (!hasCustomizedCalendars) {
             // "just make sure to just show wat is enabled to be showing in my google calender das it"
@@ -108,7 +169,6 @@ class WidgetPreferences(context: Context) {
         private const val KEY_USE_GOOGLE_COLORS = "use_google_colors"
         private const val KEY_GOOGLE_COLOR_MODE = "google_color_mode"
         private const val KEY_MARKER_STYLE = "marker_style"
-        private const val KEY_DIM_ENABLED = "dim_enabled"
         private const val KEY_FADE_ENABLED = "fade_enabled"
         private const val KEY_WIDGET_BG_COLOR = "widget_bg_color"
         private const val KEY_CUSTOM_CARD_COLOR = "custom_card_color"
@@ -117,5 +177,10 @@ class WidgetPreferences(context: Context) {
         private const val KEY_GRADIENT_ON = "gradient_on"
         private const val KEY_GRADIENT_TOP = "gradient_top"
         private const val KEY_GRADIENT_INTENSITY = "gradient_intensity"
+        private const val KEY_GRADIENT_ANGLE = "gradient_angle"
+        private const val KEY_GLASS = "card_glass"
+        private const val KEY_BG_GLASS = "widget_bg_glass"
+        private const val KEY_BG_GLASS_LEVEL = "widget_bg_glass_level"
+        private const val KEY_GLASS_LEVEL = "card_glass_level"
     }
 }

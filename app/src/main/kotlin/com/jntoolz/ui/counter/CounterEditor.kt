@@ -10,12 +10,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -24,9 +23,19 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import com.jntoolz.counter.CounterRenderer
+import com.jntoolz.ui.common.ApplyButton
+import com.jntoolz.ui.common.ApplyButtonClearance
+import com.jntoolz.ui.common.CardStyleEditor
+import com.jntoolz.ui.common.SegmentedControl
+import com.jntoolz.ui.common.ThemeRow
+import com.jntoolz.ui.common.pinnedPreviewMaxHeight
+import com.jntoolz.ui.common.applyButtonPadding
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -45,8 +54,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -54,18 +63,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jntoolz.counter.Counter
-import com.jntoolz.counter.CounterGradient
 import com.jntoolz.counter.CounterStore
-import com.jntoolz.counter.CounterTheme
-import com.jntoolz.counter.CounterLayouts
 import com.jntoolz.counter.CounterShape
 import com.jntoolz.counter.CounterWidgets
 import com.jntoolz.counter.SizeDp
 import com.jntoolz.ui.theme.NothingFont
 import com.jntoolz.ui.theme.NothingFonts
-import androidx.compose.foundation.layout.size
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -78,7 +82,10 @@ import java.time.format.DateTimeFormatter
 private val DateFmt = DateTimeFormatter.ofPattern("d MMM yyyy")
 private val TimeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
-/** Bottom sheet to add ([initial] null) or edit a counter. */
+/**
+ * Bottom sheet to add ([initial] null) or edit a counter. The floating APPLY calls [onSave] with the edits;
+ * the sheet stays open unless the caller closes it, and APPLY dims until something changes again.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CounterEditorSheet(
@@ -99,12 +106,11 @@ fun CounterEditorSheet(
     }
     var date by remember(base) { mutableStateOf(base.date) }
     var time by remember(base) { mutableStateOf(base.time) }
-    var theme by remember(base) { mutableStateOf(base.theme) }
-    var gradient by remember(base) { mutableStateOf(base.gradient) }
+    var cardStyle by remember(base) { mutableStateOf(base.cardStyle) }
     var live by remember(base) { mutableStateOf(base.liveClock) }
     val shape = remember(base) { if (base.shape == CounterShape.WIDE) CounterShape.WIDE else CounterShape.SQUARE }
-    val allowedFonts = remember { setOf(NothingFont.NDOT_77, NothingFont.LETTERA, NothingFont.CLOCK, NothingFont.SYSTEM) }
-    var font by remember(base) { mutableStateOf(base.font?.takeIf { it in allowedFonts }) }
+    // Two faces to toggle between: "Theme" (null) and Ndot 77.
+    var font by remember(base) { mutableStateOf(base.font?.takeIf { it == NothingFont.NDOT_77 }) }
     val context = LocalContext.current
     // A counter already on the home screen previews at its real widget size.
     val placed by produceState<SizeDp?>(null, base) {
@@ -112,20 +118,23 @@ fun CounterEditorSheet(
             value = withContext(Dispatchers.IO) { runCatching { CounterWidgets.placedSizes(context)[base.id] }.getOrNull() }
         }
     }
-    // null first: "Theme" (each theme's own face). Font files load on IO; the row appears once they have.
+    // null first: "Theme" (the default face). Font files load on IO; the row appears once they have.
     val fonts by produceState(listOf<NothingFont?>(null), base) {
         value = withContext(Dispatchers.IO) {
             NothingFonts.warm()
-            listOf<NothingFont?>(null) + NothingFont.entries.filter { it in allowedFonts && NothingFonts.available(it) }
+            listOf<NothingFont?>(null) + listOf(NothingFont.NDOT_77).filter { NothingFonts.available(it) }
         }
     }
     var pickDate by remember { mutableStateOf(false) }
     var pickTime by remember { mutableStateOf(false) }
 
     val draft = base.copy(
-        title = title.trim(), date = date, time = time, theme = theme, gradient = gradient, liveClock = live && time != null,
+        title = title.trim(), date = date, time = time, cardStyle = cardStyle, liveClock = live && time != null,
         shape = shape, font = font,
     )
+    // What was last applied (the counter as opened, or null while a new one is unsaved): APPLY is lit when they differ.
+    val opened = remember(base) { draft }
+    var applied by remember(base) { mutableStateOf(if (initial != null) opened else null) }
     val placedSize = placed
     val previewSize = placedSize ?: shape.size
     val previewDraft = draft.copy(title = previewTitle.trim())
@@ -137,177 +146,147 @@ fun CounterEditorSheet(
             containerColor = CounterColors.Dialog,
             contentColor = CounterColors.Text,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
-                    .navigationBarsPadding()
-                    .padding(bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                CounterWidgetTile(previewDraft, previewSize, maxHeight = 240.dp)
-
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it.take(40) },
-                    singleLine = true,
-                    placeholder = { Text("TITLE", fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp, color = CounterColors.Muted) },
-                    textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 15.sp, color = CounterColors.Text),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CounterColors.Text,
-                        unfocusedBorderColor = Color(0xFF333333),
-                        cursorColor = CounterColors.Red,
-                        focusedContainerColor = CounterColors.Card,
-                        unfocusedContainerColor = CounterColors.Card,
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FieldChip("DATE", date.format(DateFmt), Modifier.weight(1f)) { pickDate = true }
-                    FieldChip(
-                        "TIME", time?.format(TimeFmt) ?: "--:--", Modifier.weight(1f),
-                        onClear = if (time != null) ({ time = null }) else null
-                    ) { pickTime = true }
-                }
-
-                Label("THEME")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(CounterTheme.entries) { t ->
-                        val selected = t == theme
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            // Same aspect as the big preview, faithfully scaled down.
-                            CounterWidgetTile(
-                                counter = previewDraft.copy(theme = t),
-                                size = previewSize,
-                                selected = selected,
-                                maxHeight = 64.dp,
-                                pad = 6.dp,
-                                modifier = Modifier.width(thumbWidth(previewSize)),
-                                onClick = { theme = t },
+            Box(Modifier.fillMaxWidth().fillMaxHeight()) {
+                // Like the Battery widget editor: the live preview stays pinned at the top, only the options scroll.
+                Column(Modifier.fillMaxWidth().fillMaxHeight()) {
+                    CounterWidgetTile(
+                        previewDraft, previewSize,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp),
+                        maxHeight = minOf(240.dp, pinnedPreviewMaxHeight() - 36.dp),
+                    )
+                    HorizontalDivider(thickness = 1.dp, color = Color(0xFF222222))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            // The options (and their scrim) never draw up over the pinned preview box.
+                            .clipToBounds()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 20.dp)
+                                .navigationBarsPadding()
+                                .padding(top = 10.dp, bottom = ApplyButtonClearance),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = title,
+                                onValueChange = { title = it.take(40) },
+                                singleLine = true,
+                                placeholder = { Text("TITLE", fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp, color = CounterColors.Muted) },
+                                textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 15.sp, color = CounterColors.Text),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = CounterColors.Text,
+                                    unfocusedBorderColor = Color(0xFF333333),
+                                    cursorColor = CounterColors.Red,
+                                    focusedContainerColor = CounterColors.Card,
+                                    unfocusedContainerColor = CounterColors.Card,
+                                ),
+                                modifier = Modifier.fillMaxWidth()
                             )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                t.label,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
-                                letterSpacing = 1.sp,
-                                color = if (selected) CounterColors.Text else CounterColors.Muted
-                            )
-                        }
-                    }
-                }
 
-                Label("GRADIENT")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(CounterGradient.entries) { g ->
-                        val selected = g == gradient
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(
-                                modifier = Modifier
-                                    .size(width = 54.dp, height = 36.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .then(
-                                        if (g == CounterGradient.NONE) {
-                                            Modifier.background(Color(0xFF222222))
-                                        } else {
-                                            Modifier.background(
-                                                Brush.linearGradient(
-                                                    colors = listOf(Color(g.startColor), Color(g.endColor))
-                                                )
-                                            )
-                                        }
-                                    )
-                                    .border(
-                                        BorderStroke(if (selected) 2.dp else 1.dp, if (selected) CounterColors.Red else Color(0xFF333333)),
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .clickable { gradient = g },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (g == CounterGradient.NONE) {
-                                    Text("OFF", fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = CounterColors.Muted)
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                FieldChip("DATE", date.format(DateFmt), Modifier.weight(1f)) { pickDate = true }
+                                FieldChip(
+                                    "TIME", time?.format(TimeFmt) ?: "--:--", Modifier.weight(1f),
+                                    onClear = if (time != null) ({ time = null }) else null
+                                ) { pickTime = true }
+                            }
+
+                            // Same controls as the Calendar cards and the Battery widget background.
+                            Column {
+                                CardStyleEditor(
+                                    style = cardStyle,
+                                    onChange = { cardStyle = it },
+                                    autoColor = CounterRenderer.autoCardColor(),
+                                )
+                                if (fonts.size > 1) {
+                                    ThemeRow("Font") {
+                                        SegmentedControl(
+                                            items = fonts.map { it to (it?.label ?: "Theme") },
+                                            selected = font,
+                                            onSelect = { font = it },
+                                            modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                                            fontFamily = { f -> if (f != null) NothingFonts.family(f) else FontFamily.Monospace }
+                                        )
+                                    }
                                 }
                             }
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                g.label,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
-                                letterSpacing = 1.sp,
-                                color = if (selected) CounterColors.Text else CounterColors.Muted
-                            )
-                        }
-                    }
-                }
 
-                if (fonts.size > 1) {
-                    Label("FONT")
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(fonts) { f ->
-                            val selected = f == font
-                            Text(
-                                f?.label ?: "Theme",
-                                fontFamily = if (f != null) NothingFonts.family(f) else FontFamily.Monospace,
-                                fontSize = 14.sp,
-                                color = if (selected) CounterColors.Text else CounterColors.Muted,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .border(
-                                        BorderStroke(1.dp, if (selected) CounterColors.Red else Color(0xFF333333)),
-                                        RoundedCornerShape(50)
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.weight(1f)) {
+                                    Label("LIVE CLOCK")
+                                    if (time == null) {
+                                        Text("set a time to enable", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFF8E8E8E))
+                                    }
+                                }
+                                Switch(
+                                    checked = live && time != null,
+                                    enabled = time != null,
+                                    onCheckedChange = { live = it },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = CounterColors.Text,
+                                        checkedTrackColor = CounterColors.Red,
+                                        uncheckedThumbColor = CounterColors.Muted,
+                                        uncheckedTrackColor = CounterColors.Border,
+                                        disabledUncheckedThumbColor = Color(0xFF444444),
+                                        disabledUncheckedTrackColor = CounterColors.Border,
                                     )
-                                    .clickable { font = f }
-                                    .padding(horizontal = 14.dp, vertical = 8.dp)
-                            )
+                                )
+                            }
                         }
-                    }
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.weight(1f)) {
-                        Label("LIVE CLOCK")
-                        if (time == null) {
-                            Text("needs a time", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFF555555))
-                        }
-                    }
-                    Switch(
-                        checked = live && time != null,
-                        enabled = time != null,
-                        onCheckedChange = { live = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = CounterColors.Text,
-                            checkedTrackColor = CounterColors.Red,
-                            uncheckedThumbColor = CounterColors.Muted,
-                            uncheckedTrackColor = CounterColors.Border,
-                            disabledUncheckedThumbColor = Color(0xFF444444),
-                            disabledUncheckedTrackColor = CounterColors.Border,
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(12.dp)
+                                .align(Alignment.TopCenter)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(CounterColors.Dialog, Color.Transparent)
+                                    )
+                                )
                         )
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    if (initial != null && onDelete != null) {
-                        TextButton(onClick = { onDelete(initial) }) {
-                            Text("DELETE", color = CounterColors.Red, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
-                        }
                     }
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        "SAVE",
-                        color = CounterColors.Bg,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(CounterColors.Text)
-                            .clickable { onSave(draft) }
-                            .padding(horizontal = 26.dp, vertical = 12.dp)
-                    )
                 }
+                val deletable = applied
+                if (deletable != null && onDelete != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .navigationBarsPadding()
+                            .padding(start = 20.dp, bottom = 16.dp)
+                            .height(44.dp)
+                            .clip(RoundedCornerShape(50))
+                            .border(1.dp, CounterColors.Red, RoundedCornerShape(50))
+                            .background(Color.Transparent)
+                            .clickable { onDelete(deletable) }
+                            .padding(horizontal = 20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "DELETE",
+                            color = CounterColors.Red,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.5.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
+                ApplyButton(
+                    dirty = applied != draft,
+                    onApply = {
+                        onSave(draft)
+                        applied = draft
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .applyButtonPadding()
+                )
             }
         }
 
@@ -378,12 +357,6 @@ fun CounterEditorSheet(
             )
         }
     }
-}
-
-/** Thumbnail tile width: the widget at 64dp high plus the tile padding, at least 64dp. */
-private fun thumbWidth(size: SizeDp): Dp {
-    val k = CounterLayouts.fitScale(size, 160f, 64f)
-    return (size.w * k + 12f).coerceAtLeast(64f).dp
 }
 
 @Composable

@@ -15,8 +15,8 @@ class CounterMathTest {
         ZonedDateTime.of(LocalDateTime.of(y, m, d, h, min), zone)
     private fun date(y: Int, m: Int, d: Int) = LocalDate.of(y, m, d)
 
-    private fun show(target: LocalDate, now: ZonedDateTime, time: LocalTime? = null, created: LocalDate = now.toLocalDate()) =
-        CounterMath.display(target, time, created, now)
+    private fun show(target: LocalDate, now: ZonedDateTime, time: LocalTime? = null) =
+        CounterMath.display(target, time, now)
 
     @Test
     fun future() {
@@ -89,15 +89,6 @@ class CounterMathTest {
         assertNull(p.millisToTarget)
         // No time: never a clock.
         assertNull(show(date(2026, 12, 1), at(2026, 11, 1)).millisToTarget)
-    }
-
-    @Test
-    fun progress() {
-        val created = date(2026, 1, 1)
-        assertEquals(0f, CounterMath.progress(created, date(2026, 1, 11), created), 0.0001f)
-        assertEquals(0.5f, CounterMath.progress(created, date(2026, 1, 11), date(2026, 1, 6)), 0.0001f)
-        assertEquals(1f, CounterMath.progress(created, date(2026, 1, 11), date(2026, 2, 1)), 0.0001f)
-        assertEquals(1f, CounterMath.progress(created, created, created), 0.0001f)
     }
 
     @Test

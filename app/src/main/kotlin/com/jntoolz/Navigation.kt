@@ -14,12 +14,14 @@ import com.jntoolz.ui.counter.CounterScreen
 import com.jntoolz.ui.hub.HubScreen
 import com.jntoolz.ui.main.MainScreen
 import com.jntoolz.ui.sot.SotScreen
+import com.jntoolz.ui.unscroll.UnscrollScreen
 
 enum class AppDestination {
     HUB,
     CALENDAR,
     SOT,
-    COUNTER
+    COUNTER,
+    UNSCROLL
 }
 
 /** [openTool] is a tool asked for by the launch intent ("sot", "counter"); [onToolOpened] clears it once shown. */
@@ -40,7 +42,8 @@ fun MainNavigation(openTool: String? = null, onToolOpened: () -> Unit = {}) {
             HubScreen(
                 onOpenCalendar = { open(Tool.CALENDAR)?.let { destination = it } },
                 onOpenSot = { open(Tool.BATTERY)?.let { destination = it } },
-                onOpenCounter = { open(Tool.COUNTER)?.let { destination = it } }
+                onOpenCounter = { open(Tool.COUNTER)?.let { destination = it } },
+                onOpenUnscroll = { open(Tool.UNSCROLL)?.let { destination = it } }
             )
         }
         AppDestination.CALENDAR -> {
@@ -59,6 +62,10 @@ fun MainNavigation(openTool: String? = null, onToolOpened: () -> Unit = {}) {
             // CounterScreen handles back itself.
             CounterScreen(onBack = { destination = AppDestination.HUB })
         }
+        AppDestination.UNSCROLL -> {
+            // UnscrollScreen handles back itself.
+            UnscrollScreen(onBack = { destination = AppDestination.HUB })
+        }
     }
 }
 
@@ -67,4 +74,5 @@ private val Tool.destination: AppDestination
         Tool.CALENDAR -> AppDestination.CALENDAR
         Tool.BATTERY -> AppDestination.SOT
         Tool.COUNTER -> AppDestination.COUNTER
+        Tool.UNSCROLL -> AppDestination.UNSCROLL
     }

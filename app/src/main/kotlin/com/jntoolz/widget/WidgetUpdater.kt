@@ -10,10 +10,12 @@ object WidgetUpdater {
      * exactly one notifyAppWidgetViewDataChanged per widget.
      */
     fun updateAllWidgets(context: Context) {
+        WidgetBitmaps.clearCache()
         val appContext = context.applicationContext
         val appWidgetManager = AppWidgetManager.getInstance(appContext)
         val component = ComponentName(appContext, NothingCalendarWidgetProvider::class.java)
-        for (id in appWidgetManager.getAppWidgetIds(component)) {
+        val ids = appWidgetManager.getAppWidgetIds(component)
+        for (id in ids) {
             NothingCalendarWidgetProvider.updateAppWidget(appContext, appWidgetManager, id)
         }
     }

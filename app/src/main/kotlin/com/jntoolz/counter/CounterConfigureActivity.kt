@@ -36,6 +36,7 @@ class CounterConfigureActivity : ComponentActivity() {
                 onPick = { counter -> pick(store, counter) },
                 onClose = { finish() },
                 widgetSize = size,
+                editing = store.get(store.counterIdForWidget(appWidgetId)),
             )
         }
     }

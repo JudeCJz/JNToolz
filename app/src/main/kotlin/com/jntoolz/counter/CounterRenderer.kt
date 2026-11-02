@@ -12,7 +12,10 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.TextUtils
-import androidx.annotation.RequiresApi
+import com.jntoolz.widget.CardPainter
+import com.jntoolz.data.CardSpec
+import com.jntoolz.data.CardStyle
+import com.jntoolz.data.ThemeMath
 import com.jntoolz.ui.theme.NothingFont
 import com.jntoolz.ui.theme.NothingFonts
 import kotlin.math.min
@@ -24,7 +27,9 @@ import kotlin.math.sqrt
  * on every launcher. [face] is the only entry point: the widget and every in-app preview call it, so they
  * cannot drift apart.
  *
- * Design system (every theme, every size): one layout engine, themes only pick colours.
+ * Design system (every size): one layout engine; the look is only the counter's [CardStyle] (drawn by
+ * CardPainter, like the Calendar and Battery widgets) and its number font. Text is white or ink, picked from
+ * the real card surface by [ThemeMath.textOn].
  * - Spacing: [CounterLayouts.padDp] at the edges; fixed gaps between rows.
  * - Type: the number in the counter's font (default: system sans), title in sentence case (medium),
  *   label in small tracked caps (medium). Everything aligns to the left padding.
@@ -39,9 +44,8 @@ object CounterRenderer {
     /**
      * One rendered face plus where (and in which colour) the live clock sits on top of it.
      *
-     * Most themes are one full-colour [bitmap]. Material You themes are two white alpha masks,
-     * [bitmap] (base: the card) and [overlay] (number / title / label), that the widget tints with
-     * system colour resources so the launcher recolours them live when the wallpaper changes.
+     * The face is one full-colour [bitmap]. [overlay] and the tints are always null / 0 now (they were the
+     * removed Material You masks); kept so the widget and preview code that reads them still compiles.
      */
     class Face(
         val bitmap: Bitmap,
@@ -79,95 +83,31 @@ object CounterRenderer {
         val wDp = size.w.coerceAtLeast(40)
         val hDp = size.h.coerceAtLeast(40)
         val layout = CounterLayouts.forSize(wDp, hDp)
-        val theme = counter?.theme ?: CounterTheme.BLACK
         val clockMs = if (counter != null && display != null) counter.clockMillis(display) else null
         val clock = if (clockMs != null && !off) CounterLayouts.clockSlot(layout, wDp, hDp) else null
         val corner = cornerDp(context)
         val fontScale = context.resources.configuration.fontScale.coerceIn(1f, 1.3f)
-        val gradient = counter?.gradient ?: CounterGradient.NONE
+        val spec = cardSpec(counter?.cardStyle ?: CardStyle())
+        val pal = paletteFor(spec)
 
-        fun paint(pal: Palette, maxPixels: Int): Bitmap {
-            var w = wDp * pxPerDp
-            var h = hDp * pxPerDp
-            var u = pxPerDp
-            if (w * h > maxPixels) {
-                val k = sqrt(maxPixels / (w * h))
-                w *= k; h *= k; u *= k
-            }
-            val bmp = Bitmap.createBitmap(w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
-            val s = Scene(Canvas(bmp), bmp.width.toFloat(), bmp.height.toFloat(), u, hDp, pal, layout,
-                min(corner * u, min(bmp.width, bmp.height) / 2f), counter?.font, fontScale, gradient)
-            s.card()
-            if (counter == null || display == null) s.empty()
-            else s.draw(counter.title.trim(), display, clock, clockMs)
-            return bmp
-        }
-
-        if (off) {
-            return Face(offBitmap(wDp, hDp, pxPerDp, corner, theme), null, SizeDp(wDp, hDp), layout, null,
-                null, null, LABEL_DARK, 0, 0, 0, corner)
-        }
-        val tint = if (gradient.isGradient) null else tint(context, theme)
-        if (tint == null) {
-            val pal = if (gradient.isGradient && (theme == CounterTheme.YOU || theme == CounterTheme.YOU_SOFT)) {
-                Palette(CARD_DARK, 0, WHITE, WHITE, LABEL_DARK, 0, 0, WHITE)
-            } else {
-                palette(theme)
-            }
-            return Face(paint(pal, MAX_PIXELS), null, SizeDp(wDp, hDp), layout, clock,
-                null, null, pal.clock, 0, 0, 0, corner)
-        }
-        // Two layers share the RemoteViews bitmap budget.
-        val base = paint(YOU_BASE, MAX_PIXELS * 3 / 4)
-        val over = paint(YOU_OVER, MAX_PIXELS * 3 / 4)
-        return Face(base, over, SizeDp(wDp, hDp), layout, clock,
-            tint.base, tint.over, tint.clock, tint.baseRes, tint.overRes, tint.clockRes, corner)
-    }
-
-    /** The "off" face: the dark card with a dim 4x4 dot logo in the middle. */
-    private fun offBitmap(wDp: Int, hDp: Int, pxPerDp: Float, cornerDp: Float, theme: CounterTheme): Bitmap {
-        val (card, dots) = when (theme) {
-            CounterTheme.WHITE, CounterTheme.YOU_SOFT -> CARD_LIGHT to 0xFFCFCFCF.toInt()
-            CounterTheme.GLASS -> GLASS_CARD to 0x40FFFFFF
-            else -> CARD_DARK to 0xFF3A3A3A.toInt()
-        }
+        var w = wDp * pxPerDp
+        var h = hDp * pxPerDp
         var u = pxPerDp
-        if (wDp * hDp * u * u > MAX_PIXELS) u *= sqrt(MAX_PIXELS / (wDp * hDp * u * u))
-        val bmp = Bitmap.createBitmap((wDp * u).roundToInt().coerceAtLeast(1), (hDp * u).roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
-        val c = Canvas(bmp)
-        val w = bmp.width.toFloat(); val h = bmp.height.toFloat()
-        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = card }
-        val r = min(cornerDp * u, min(w, h) / 2f)
-        c.drawRoundRect(RectF(0f, 0f, w, h), r, r, p)
-        val side = min(min(w, h) * 0.3f, 40f * u)
-        val step = side / 4f
-        p.color = dots
-        for (i in 0 until 4) for (j in 0 until 4) {
-            c.drawCircle(w / 2 - side / 2 + step * (i + 0.5f), h / 2 - side / 2 + step * (j + 0.5f), step * 0.3f, p)
+        if (w * h > MAX_PIXELS) {
+            val k = sqrt(MAX_PIXELS / (w * h))
+            w *= k; h *= k; u *= k
         }
-        return bmp
-    }
-
-    // ---- Material You ----
-
-    private class Tint(val baseRes: Int, val overRes: Int, val clockRes: Int, val base: Int?, val over: Int, val clock: Int)
-
-    private fun tint(context: Context, theme: CounterTheme): Tint? = when (theme) {
-        CounterTheme.YOU, CounterTheme.YOU_SOFT ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) systemTint(context, theme)
-            else if (theme == CounterTheme.YOU) Tint(0, 0, 0, 0xFF2B2B2B.toInt(), 0xFFEDEDED.toInt(), 0xFFEDEDED.toInt())
-            else Tint(0, 0, 0, 0xFFE6E6E6.toInt(), 0xFF1A1A1A.toInt(), 0xFF1A1A1A.toInt())
-        else -> null
-    }
-
-    @RequiresApi(Build.VERSION_CODES.S)
-    private fun systemTint(context: Context, theme: CounterTheme): Tint {
-        val (b, o) = if (theme == CounterTheme.YOU) {
-            android.R.color.system_accent1_800 to android.R.color.system_accent1_100
-        } else {
-            android.R.color.system_accent1_100 to android.R.color.system_accent1_900
+        val bmp = Bitmap.createBitmap(w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        val s = Scene(Canvas(bmp), bmp.width.toFloat(), bmp.height.toFloat(), u, hDp, pal, layout,
+            min(corner * u, min(bmp.width, bmp.height) / 2f), counter?.font, fontScale, spec)
+        s.card()
+        when {
+            off -> s.offLogo()
+            counter == null || display == null -> s.empty()
+            else -> s.draw(counter.title.trim(), display, clock, clockMs)
         }
-        return Tint(b, o, o, context.getColor(b), context.getColor(o), context.getColor(o))
+        return Face(bmp, null, SizeDp(wDp, hDp), layout, if (off) null else clock,
+            null, null, if (off) pal.label else pal.text, 0, 0, 0, corner)
     }
 
     /** The launcher's widget corner radius in dp: the system value on Android 12+, else 16dp. */
@@ -187,34 +127,22 @@ object CounterRenderer {
     @Volatile
     private var cachedCorner: Float? = null
 
-    // ---- themes: colours only ----
+    // ---- colours ----
 
-    private class Palette(
-        /** Card fill; null = nothing drawn (You overlay mask). */
-        val card: Int?,
-        /** 1dp inner hairline, 0 = none. */
-        val stroke: Int,
-        val number: Int,
-        val title: Int,
-        val label: Int,
-        /** Progress bar: unfilled track / filled part; 0 = no bar. */
-        val track: Int,
-        val fill: Int,
-        val clock: Int,
-    )
+    /** Text colours: white on a dark card, ink on a light one. */
+    private class Palette(val text: Int, val label: Int)
 
-    private fun palette(theme: CounterTheme): Palette = when (theme) {
-        CounterTheme.BLACK -> Palette(CARD_DARK, 0, WHITE, WHITE, LABEL_DARK, 0, 0, WHITE)
-        CounterTheme.WHITE -> Palette(CARD_LIGHT, 0, INK, INK, LABEL_LIGHT, 0, 0, INK)
-        CounterTheme.RED -> Palette(CARD_DARK, 0, RED, WHITE, LABEL_DARK, 0, 0, WHITE)
-        CounterTheme.GLASS -> Palette(GLASS_CARD, 0x24FFFFFF, WHITE, WHITE, 0xC8FFFFFF.toInt(), 0, 0, WHITE)
-        CounterTheme.PROGRESS -> Palette(CARD_DARK, 0, WHITE, WHITE, LABEL_DARK, 0xFF333333.toInt(), RED, WHITE)
-        CounterTheme.YOU, CounterTheme.YOU_SOFT -> YOU_OVER
-    }
+    private val DARK = Palette(WHITE, LABEL_DARK)
+    private val LIGHT = Palette(INK, LABEL_LIGHT)
 
-    /** Material You masks: white where the layer paints, the tint gives the colour. */
-    private val YOU_BASE = Palette(WHITE, 0, 0, 0, 0, 0, 0, 0)
-    private val YOU_OVER = Palette(null, 0, WHITE, WHITE, 0xB3FFFFFF.toInt(), 0, 0, WHITE)
+    /** The card colour "auto" (colour 0) means: the dark card. The editor shows it as the auto swatch. */
+    fun autoCardColor(): Int = CARD_DARK
+
+    /** The counter's card recipe, colour 0 resolved to [autoCardColor]. */
+    fun cardSpec(style: CardStyle): CardSpec = style.spec(if (style.color != 0) style.color else CARD_DARK)
+
+    /** One text rule for every tool: [ThemeMath.textOn] the real card surface. */
+    private fun paletteFor(spec: CardSpec): Palette = if (ThemeMath.textOn(spec) == ThemeMath.INK) LIGHT else DARK
 
     /** Per-render state. Paints are created here (renders can run on two threads at once). */
     private class Scene(
@@ -229,7 +157,7 @@ object CounterRenderer {
         /** The counter's number font; null = "Theme": the system sans. */
         val numFont: NothingFont?,
         val fs: Float,
-        val gradient: CounterGradient = CounterGradient.NONE,
+        val spec: CardSpec,
     ) {
         val fill = Paint(Paint.ANTI_ALIAS_FLAG)
         val bounds = Rect()
@@ -239,37 +167,22 @@ object CounterRenderer {
         val titleSize = (if (compact) 12f else 13f) * u * fs
         val labelSize = (if (compact) 10f else 11f) * u * fs
 
-        fun card() {
-            val r = corner
-            if (gradient.isGradient) {
-                val shader = android.graphics.LinearGradient(
-                    0f, 0f, W, H,
-                    gradient.startColor,
-                    gradient.endColor,
-                    android.graphics.Shader.TileMode.CLAMP
-                )
-                fill.shader = shader
-                c.drawRoundRect(RectF(0f, 0f, W, H), r, r, fill)
-                fill.shader = null
-            } else {
-                pal.card?.let {
-                    fill.color = it
-                    c.drawRoundRect(RectF(0f, 0f, W, H), r, r, fill)
-                }
-            }
-            if (pal.stroke != 0) {
-                val sw = maxOf(1f, 1f * u)
-                val st = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    style = Paint.Style.STROKE; strokeWidth = sw; color = pal.stroke
-                }
-                c.drawRoundRect(RectF(sw / 2, sw / 2, W - sw / 2, H - sw / 2), r - sw / 2, r - sw / 2, st)
+        fun card() = CardPainter.draw(c, W, H, corner, u, spec)
+
+        /** The "off" face: a dim 4x4 dot logo in the middle, a faint step of the text colour over the card. */
+        fun offLogo() {
+            val side = min(min(W, H) * 0.3f, 40f * u)
+            val step = side / 4f
+            fill.color = ThemeMath.blend(ThemeMath.surfaceOf(spec), pal.text, 0.17f)
+            for (i in 0 until 4) for (j in 0 until 4) {
+                c.drawCircle(W / 2 - side / 2 + step * (i + 0.5f), H / 2 - side / 2 + step * (j + 0.5f), step * 0.3f, fill)
             }
         }
 
         // ---- text ----
 
         fun titlePaint() = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            typeface = Fonts.medium; textSize = titleSize; color = pal.title; textAlign = Paint.Align.LEFT
+            typeface = Fonts.medium; textSize = titleSize; color = pal.text; textAlign = Paint.Align.LEFT
         }
 
         fun labelPaint() = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -327,7 +240,7 @@ object CounterRenderer {
             if (nf != null && dot && !NothingFonts.available(nf)) return dots(s, x, baseline, maxW, maxCap, draw)
             val tf = if (nf != null) NothingFonts.typeface(nf) else Fonts.number
             val p = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                typeface = tf; textSize = 100f; color = pal.number; textAlign = Paint.Align.LEFT
+                typeface = tf; textSize = 100f; color = pal.text; textAlign = Paint.Align.LEFT
                 letterSpacing = if (dot) 0.04f else -0.01f
             }
             // Cap height from a reference glyph so 1, 23 and 1204 share one baseline and top.
@@ -355,7 +268,7 @@ object CounterRenderer {
             val cell = min(maxW / maxOf(cols, 11), (if (s.all { it.isDigit() }) maxCap else maxCap * 0.78f) / 7f)
             val top = baseline - cell * 7
             if (!draw) return RectF(x, top, x + cols * cell, baseline)
-            fill.color = pal.number
+            fill.color = pal.text
             val r = cell * 0.40f
             glyphs.forEachIndexed { gi, g ->
                 for (row in 0 until 7) for (col in 0 until 5) {
@@ -368,25 +281,6 @@ object CounterRenderer {
         }
 
         // ---- parts ----
-
-        /** Rounded progress bar centred on [cy]. */
-        fun bar(progress: Float, left: Float, right: Float, cy: Float) {
-            if (right - left < 8f * u) return
-            val h = 4f * u
-            val r = h / 2
-            fill.color = pal.track
-            c.drawRoundRect(RectF(left, cy - r, right, cy + r), r, r, fill)
-            val p = progress.coerceIn(0f, 1f)
-            if (p > 0f) {
-                fill.color = pal.fill
-                c.drawRoundRect(RectF(left, cy - r, left + maxOf(h, (right - left) * p), cy + r), r, r, fill)
-            }
-        }
-
-        private val hasBar get() = pal.track != 0
-
-        /** The bar only means something while counting down (or on the day itself). */
-        private fun showBar(d: CounterDisplay) = hasBar && d.phase != CounterDisplay.Phase.PAST
 
         /** Clock paint matching the Chronometer of [slot] (sans medium, tabular figures). */
         fun clockPaint(slot: ClockSlot) = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -409,7 +303,7 @@ object CounterRenderer {
             if (layout == CounterLayout.WIDE) row(title, d, clock, clockMs) else column(title, d, clock)
         }
 
-        /** Square and tall: title top-left; bottom-up: clock, label, (bar), number. */
+        /** Square and tall: title top-left; bottom-up: clock, label, number. */
         private fun column(title: String, d: CounterDisplay, clock: ClockSlot?) {
             val cw = W - 2 * pad
             val titleBase = title(title, pad, pad, cw, CounterLayouts.titleLines(layout, hDp))
@@ -420,17 +314,15 @@ object CounterRenderer {
                 val clockBase = H - clock.marginBottomDp * u - cp.fontMetrics.bottom
                 y = clockBase - capH(cp) - 8f * u
             }
-            // Measure the block (number, bar, label) bottom-up first, then draw it.
+            // Measure the block (number, label) bottom-up first, then draw it.
             val lp = labelPaint()
             val labelH = if (d.label.isNotEmpty()) capH(lp) + 8f * u else 0f
-            val barH = if (showBar(d)) 4f * u + 10f * u else 0f
-            val numBase = y - labelH - barH
+            val numBase = y - labelH
             val top = if (title.isEmpty()) pad else titleBase + 14f * u
             // One dominant number, but never more than ~0.42 of the card's height.
             val cap = min(numBase - top, 0.42f * H)
             number(d.number, pad, numBase, cw, cap, draw = false)
             if (d.label.isNotEmpty()) line(d.label, lp, pad, y, cw)
-            if (showBar(d)) bar(d.progress, pad, W - pad, y - labelH - 2f * u)
             number(d.number, pad, numBase, cw, cap)
         }
 
@@ -463,7 +355,6 @@ object CounterRenderer {
                     val capTop = baseline - cap
                     line(title, tp, tx, capTop + capH(tp), tw)
                     line(d.label, lp, tx, baseline, tw)
-                    if (showBar(d) && !compact) bar(d.progress, tx, right, (capTop + capH(tp) + baseline - capH(lp)) / 2f)
                 }
                 hasTitle -> line(title, tp, tx, H / 2 + capH(tp) / 2, tw)
                 hasLabel -> line(d.label, lp, tx, H / 2 + capH(lp) / 2, tw)
@@ -490,14 +381,11 @@ object CounterRenderer {
         }
     }
 
-    private const val WHITE = 0xFFFFFFFF.toInt()
-    private const val INK = 0xFF111111.toInt()
-    private const val RED = 0xFFFF2E2E.toInt()
+    private const val WHITE = ThemeMath.WHITE
+    private const val INK = ThemeMath.INK
     private const val CARD_DARK = 0xFF161616.toInt()
-    private const val CARD_LIGHT = 0xFFF4F4F4.toInt()
     private const val LABEL_DARK = 0xFF9A9A9A.toInt()
     private const val LABEL_LIGHT = 0xFF6A6A6A.toInt()
-    private const val GLASS_CARD = 0x80000000.toInt()
 
     private val DOT_GLYPHS: Map<Char, List<String>> = mapOf(
         '0' to listOf("01110", "10001", "10011", "10101", "11001", "10001", "01110"),

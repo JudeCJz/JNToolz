@@ -31,11 +31,12 @@ class Face(
 object BatteryWidgetModel {
     const val MIN_SPAN = 30 * Stats.MIN
 
-    /** The graph window [from, now] for a range; "since unplug" spans at least [MIN_SPAN]. */
+    /** The graph window [from, now] for a range; every range spans at least [MIN_SPAN] (so just after midnight "today" is not empty). */
     fun window(range: Range, now: Long, session: Stats?): LongArray {
         val from = when (range) {
             Range.H6 -> now - 6 * Stats.HOUR
             Range.H24 -> now - 24 * Stats.HOUR
+            Range.TODAY -> Stats.midnight(now)
             Range.SINCE_UNPLUG ->
                 if (session == null || session.empty || session.fallback && session.gt.isEmpty()) now - 6 * Stats.HOUR
                 else session.start
@@ -48,6 +49,7 @@ object BatteryWidgetModel {
         Range.H6 -> "Battery (6h)"
         Range.H24 -> "Battery (24h)"
         Range.SINCE_UNPLUG -> "Since unplug"
+        Range.TODAY -> "Today"
     }
 
     fun build(cfg: BatteryWidgetConfig, d: WidgetData): Face {

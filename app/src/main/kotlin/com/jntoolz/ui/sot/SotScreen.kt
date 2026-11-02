@@ -13,10 +13,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
@@ -29,16 +27,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jntoolz.sot.widget.BatteryWidgetProvider
+import com.jntoolz.ui.common.AddWidgetButton
 
-private val TABS = listOf(0 to "NOW", 1 to "HISTORY", 2 to "APPS & SETTINGS")
-
-/** The Battery tool (internal name sot): the app's top bar, a chip row of tabs (Now, History, Apps & Settings), black OLED pages. */
+/** The Battery tool (internal name sot): one dashboard page (gear in the top bar opens Settings), black OLED. */
 @Composable
 fun SotScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val vm: SotViewModel = viewModel()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val scrolls = List(3) { rememberScrollState() }
+    val dashScroll = rememberScrollState()
+    val settingsScroll = rememberScrollState()
 
     val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.recheck() }
 
@@ -55,7 +54,7 @@ fun SotScreen(onBack: () -> Unit) {
     LaunchedEffect(lifecycle) { lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { vm.whileResumed() } }
     DisposableEffect(Unit) { onDispose { vm.leave() } }
 
-    BackHandler { if (vm.page != 0) vm.show(0) else onBack() }
+    BackHandler { if (vm.settingsOpen) vm.showSettings(false) else onBack() }
 
     val openUsage = {
         if (Build.VERSION.SDK_INT >= 28) {
@@ -69,49 +68,47 @@ fun SotScreen(onBack: () -> Unit) {
             .fillMaxSize()
             .background(SotColors.Bg)
     ) {
-        SotTopBar("BATTERY", onBack)
-        Segmented(
-            TABS,
-            vm.page,
-            vm::show,
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 6.dp)
-        )
-        Box(Modifier.weight(1f)) { when (vm.page) {
-            0 -> NowTab(vm, scrolls[0])
-            1 -> HistoryTab(vm, scrolls[1])
-            else -> AppsSettingsTab(
+        if (vm.settingsOpen) {
+            SotTopBar("SETTINGS", { vm.showSettings(false) })
+            SettingsPage(
                 vm,
-                scrolls[2],
-                onUsage = openUsage,
-                onBackground = { openBattery(context) },
-                onNotif = {
-                    val activity = context.findActivity()
-                    if (Build.VERSION.SDK_INT >= 33 && !vm.settings.notif &&
-                        activity?.shouldShowRequestPermissionRationale(NOTIF) == true
-                    ) {
-                        askPermission.launch(NOTIF)
-                    } else {
-                        tryStart(
-                            context,
-                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                        )
-                    }
-                },
-                onBluetooth = {
-                    // Nearby-devices permission, so "Bluetooth on, nothing connected" can be told apart from a connected watch.
-                    val activity = context.findActivity()
-                    if (vm.settings.bluetooth || (vm.askedBt() && activity?.shouldShowRequestPermissionRationale(BT) != true)) {
-                        tryStart(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName)))
-                    } else {
-                        vm.markAskedBt()
-                        askPermission.launch(BT)
-                    }
-                },
-                onTip = { tryStart(context, it) }
+                settingsScroll,
+
+                    onUsage = openUsage,
+                    onBackground = { openBattery(context) },
+                    onNotif = {
+                        val activity = context.findActivity()
+                        if (Build.VERSION.SDK_INT >= 33 && !vm.settings.notif &&
+                            activity?.shouldShowRequestPermissionRationale(NOTIF) == true
+                        ) {
+                            askPermission.launch(NOTIF)
+                        } else {
+                            tryStart(
+                                context,
+                                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            )
+                        }
+                    },
+                    onBluetooth = {
+                        // Nearby-devices permission, so "Bluetooth on, nothing connected" can be told apart from a connected watch.
+                        val activity = context.findActivity()
+                        if (vm.settings.bluetooth || (vm.askedBt() && activity?.shouldShowRequestPermissionRationale(BT) != true)) {
+                            tryStart(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName)))
+                        } else {
+                            vm.markAskedBt()
+                            askPermission.launch(BT)
+                        }
+                    },
+                    onTip = { tryStart(context, it) }
             )
-        } }
+        } else {
+            SotTopBar("BATTERY", onBack, onSettings = { vm.showSettings(true) })
+            AddWidgetButton(
+                provider = BatteryWidgetProvider::class.java,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp)
+            )
+            Dashboard(vm, dashScroll, onUsage = openUsage)
+        }
     }
 }
 

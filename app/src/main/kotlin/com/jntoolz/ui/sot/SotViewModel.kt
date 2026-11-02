@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,12 +15,17 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jntoolz.sot.Apps
+import com.jntoolz.sot.DeviceInfo
+import com.jntoolz.sot.Drain
+import com.jntoolz.sot.GraphExport
 import com.jntoolz.sot.Health
 import com.jntoolz.sot.SotTool
 import com.jntoolz.sot.Stats
 import com.jntoolz.sot.Store
 import com.jntoolz.sot.Tips
 import com.jntoolz.sot.TrackerService
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
 import com.jntoolz.sot.Usage
 import com.jntoolz.ui.theme.NothingFonts
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +47,7 @@ import kotlin.math.roundToInt
 internal const val NOTIF = "android.permission.POST_NOTIFICATIONS"
 internal const val BT = "android.permission.BLUETOOTH_CONNECT"
 
-/** One day of History; [graph] and [sessions] are filled only for the open day. */
+/** One day of History; [graph] is filled only for the open day. */
 internal class DayUi(
     val from: Long,
     val to: Long,
@@ -51,8 +55,7 @@ internal class DayUi(
     val sot: String,
     val graph: Stats?,
     val rangeFrom: Long,
-    val rangeTo: Long,
-    val sessions: List<Pair<String, String>>
+    val rangeTo: Long
 )
 
 internal class AppRow(val icon: ImageBitmap?, val name: String, val pct: String)
@@ -79,11 +82,15 @@ internal class SotViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx: Context get() = getApplication()
     private val prefs = SotTool.prefs(app)
 
-    var page by mutableIntStateOf(0)
+    var settingsOpen by mutableStateOf(false)
         private set
     var today by mutableStateOf(prefs.getBoolean("openToday", false))
         private set
     var stats by mutableStateOf<Stats?>(null)
+        private set
+    var perPercent by mutableLongStateOf(-1L) // ms per 1% drained (charged while charging), last 2 h; -1 unknown
+        private set
+    var fullIn by mutableLongStateOf(-1L) // ms until 100% while charging; -1 unknown
         private set
     var health by mutableStateOf("–")
         private set
@@ -115,9 +122,9 @@ internal class SotViewModel(app: Application) : AndroidViewModel(app) {
         NothingFonts.warm()
     }
 
-    /** Leaving the tool: next time it opens on Now, counting the way Settings says. */
+    /** Leaving the tool: next time it opens on the dashboard, counting the way Settings says. */
     fun leave() {
-        page = 0
+        settingsOpen = false
         today = prefs.getBoolean("openToday", false)
     }
 
@@ -132,13 +139,12 @@ internal class SotViewModel(app: Application) : AndroidViewModel(app) {
         combine(store.changes, clock, poke) { _, _, _ -> }.conflate().collect { refresh(store) }
     }
 
-    fun show(n: Int) {
-        page = n
-        if (n == 2) {
-            appsAt = 0
+    /** Opens or closes the settings page; opening re-reads the tips and permissions. */
+    fun showSettings(on: Boolean) {
+        settingsOpen = on
+        if (on) {
             viewModelScope.launch { loadTips() }
             viewModelScope.launch { loadSettings() }
-            poke.value++
         }
     }
 
@@ -162,6 +168,71 @@ internal class SotViewModel(app: Application) : AndroidViewModel(app) {
     fun markAskedNotif() = prefs.edit().putBoolean("askedNotif", true).apply()
     fun askedBt(): Boolean = prefs.getBoolean("askedBt", false)
     fun markAskedBt() = prefs.edit().putBoolean("askedBt", true).apply()
+
+    /** The graph's data (the range now shown) as text for the clipboard. Blocking work runs off the main thread. */
+    suspend fun graphText(): String {
+        val st = stats ?: return ""
+        return exportText(st, if (today) "today" else "since unplug", perPercent, st.charging)
+    }
+
+    /** One History day's graph data as text for the clipboard. */
+    suspend fun dayText(day: DayUi): String {
+        val st = day.graph ?: return ""
+        return exportText(st, day.name.lowercase(), -1L, false)
+    }
+
+    private suspend fun exportText(st: Stats, range: String, pp: Long, charging: Boolean): String =
+        withContext(Dispatchers.IO) {
+            val to = st.now
+            val sn = Store.get(ctx).snap()
+            val exact = Usage.allowed(ctx)
+            // The usage cache only reaches back to usageFrom; an older day falls back to the tracker's screen log.
+            val screen = usage.takeIf { exact && st.start >= usageFrom } ?: sn.screen
+            var ivs: List<GraphExport.AppIv>? = null
+            var totals: List<GraphExport.AppTotal>? = null
+            if (exact && !st.empty) {
+                ivs = appIntervals(st.start, to, sn.current)
+                totals = Apps.top(ctx, st.start, to, sn.current, st.usedOn, 0)
+                    .map { GraphExport.AppTotal(it.label.toString(), it.fgMs, it.mAh, it.pct) }
+            }
+            val devInfo = DeviceInfo.summary(ctx, sn.bat)
+            GraphExport.build(st, range, sn.bat, screen, sn.current, ivs, totals, pp, charging, deviceHeader = devInfo)
+        }
+
+    /** Foreground intervals of every app in [from, to] with their estimated charge. Blocking. */
+    private fun appIntervals(from: Long, to: Long, current: List<LongArray>): List<GraphExport.AppIv> {
+        val qFrom = maxOf(0L, from - Apps.LOOKBACK)
+        val t = ArrayList<Long>()
+        val type = ArrayList<Int>()
+        val pkg = ArrayList<String?>()
+        val cls = ArrayList<String?>()
+        try {
+            val ev = ctx.getSystemService(UsageStatsManager::class.java).queryEvents(qFrom, to)
+            val e = UsageEvents.Event()
+            while (ev.hasNextEvent()) {
+                ev.getNextEvent(e)
+                val k = e.eventType
+                if (k != Apps.RESUMED && k != Apps.PAUSED && k != Apps.SCREEN_OFF && k != Apps.SHUTDOWN) continue
+                t += e.timeStamp
+                type += k
+                pkg += e.packageName
+                cls += e.className
+            }
+        } catch (e: RuntimeException) {
+            return emptyList()
+        }
+        val map = Apps.intervals(t.toLongArray(), type.toIntArray(), pkg.toTypedArray(), cls.toTypedArray(), qFrom, from, to)
+        val cv = Apps.Curve(current)
+        val pm = ctx.packageManager
+        val skip = setOf(ctx.packageName, "com.android.systemui", "android")
+        val out = ArrayList<GraphExport.AppIv>()
+        for ((p, list) in map) {
+            if (p in skip) continue
+            val label = try { pm.getApplicationLabel(pm.getApplicationInfo(p, 0)).toString() } catch (e: Exception) { p }
+            for (iv in list) out += GraphExport.AppIv(label, iv[0], iv[1], cv.mah(listOf(iv)))
+        }
+        return out
+    }
 
     /** Permissions or settings may have changed (on resume, after a permission dialog). */
     fun recheck() {
@@ -200,12 +271,19 @@ internal class SotViewModel(app: Application) : AndroidViewModel(app) {
             if (td) Stats.today(sn.bat, screen, now) else Stats.compute(sn.bat, screen, false, now)
         }
         stats = st
+        if (st.charging) {
+            perPercent = Drain.chargePerPercent(sn.bat, now)
+            fullIn = Drain.fullIn(sn.bat, now)
+        } else {
+            perPercent = Drain.perPercent(sn.bat, now)
+            fullIn = -1
+        }
         val need = (if (st.empty) now - 6 * Stats.HOUR else st.start) - Stats.HOUR
         if (exact && !usageBusy && (now - usageAt > 30_000 || need < usageFrom)) loadUsage(need)
 
         if (sn.batVersion != healthVersion) {
             healthVersion = sn.batVersion
-            health = withContext(Dispatchers.IO) { Health.percentText(ctx, sn.bat) }
+            health = withContext(Dispatchers.IO) { DeviceInfo.batteryHealth(ctx, sn.bat) }
         }
         val key = Triple(sn.dataVersion, openDay, Stats.midnight(now))
         if (key != historyKey) {
@@ -213,7 +291,7 @@ internal class SotViewModel(app: Application) : AndroidViewModel(app) {
             val open = openDay
             days = withContext(Dispatchers.Default) { history(sn, now, open) }
         }
-        if (page == 2 && !appsBusy && now - appsAt > 60_000) loadApps(store, st, exact)
+        if (!appsBusy && now - appsAt > 60_000) loadApps(store, st, exact)
     }
 
     /**
@@ -261,7 +339,7 @@ internal class SotViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** One row per day, newest first, up to 30 days; the open one also gets its graph and sessions. */
+    /** One row per day, newest first, up to 30 days; the open one also gets its graph. */
     private fun history(sn: Store.Snap, now: Long, open: Long): List<DayUi> {
         val c = Calendar.getInstance()
         c.timeInMillis = Stats.midnight(now)
@@ -276,28 +354,15 @@ internal class SotViewModel(app: Application) : AndroidViewModel(app) {
             spans += longArrayOf(a, z)
         }
         val dn = SimpleDateFormat("EEE d MMM", Locale.getDefault())
-        val tf = android.text.format.DateFormat.getTimeFormat(ctx)
-        val wd = SimpleDateFormat("EEE", Locale.getDefault())
         return spans.mapIndexed { i, (from, to) ->
             val name = if (i == 0) "Today" else if (i == 1) "Yesterday" else dn.format(Date(from))
             val ds = Stats.day(sn.bat, sn.screen, from, to, now)
-            if (from != open) return@mapIndexed DayUi(from, to, name, Stats.dur(ds.sot), null, 0, 0, emptyList())
+            if (from != open) return@mapIndexed DayUi(from, to, name, Stats.dur(ds.sot), null, 0, 0)
             // Only the hours with data: a day that started tracking at noon is not a sliver in 24 hours.
             val a = max(from, hour(first, false))
             var z = min(to, hour(now, true))
             if (z - a < 2 * Stats.HOUR) z = min(to, a + 2 * Stats.HOUR)
-            // A time inside the day as just the time, outside it with the weekday.
-            fun whenText(t: Long): String {
-                val dt = Date(t)
-                return if (t in from until to) tf.format(dt) else wd.format(dt) + " " + tf.format(dt)
-            }
-            val sessions = Stats.history(sn.bat, 200).mapNotNull { x ->
-                val end = if (x[1] < 0) now else x[1]
-                if (end <= from || x[0] >= to) return@mapNotNull null
-                val span = whenText(x[0]) + " – " + (if (x[1] < 0) "now" else whenText(end))
-                span to Stats.dur(Stats.sotBetween(sn.screen, x[0], end, now))
-            }
-            DayUi(from, to, name, Stats.dur(ds.sot), ds, a, z, sessions)
+            DayUi(from, to, name, Stats.dur(ds.sot), ds, a, z)
         }
     }
 

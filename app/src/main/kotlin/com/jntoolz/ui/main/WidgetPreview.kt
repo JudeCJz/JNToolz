@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shader
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -39,9 +43,15 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.unit.Dp
 import com.jntoolz.data.CalendarEvent
+import com.jntoolz.widget.CardPainter
 import com.jntoolz.data.ThemeMath
 import com.jntoolz.data.ThemeSettings
+import com.jntoolz.ui.common.cardBackground
 
 @Composable
 internal fun NothingWidgetPreviewCard(
@@ -51,23 +61,28 @@ internal fun NothingWidgetPreviewCard(
     onEventClick: (CalendarEvent) -> Unit
 ) {
     val headerColor = Color(ThemeMath.headerColor(theme.bgColor))
+    val maxEvents = 3
+    val displayToday = todayEvents.take(maxEvents)
+    val displayUpcoming = upcomingEvents.take((maxEvents - displayToday.size).coerceAtLeast(0))
 
     Card(
-        modifier = Modifier.fillMaxWidth().height(360.dp),
+        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(theme.bgColor)),
+        colors = CardDefaults.cardColors(containerColor = if (theme.bgGlass) Color.Transparent else Color(theme.bgColor)),
         border = null
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .wrapContentHeight()
+                .then(if (theme.bgGlass) Modifier.glassBackground(theme, 24.dp) else Modifier)
                 // Swallow leftover scroll/fling so reaching the end doesn't scroll the page
                 .nestedScroll(ConsumeRemainingScroll)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
             // TODAY SECTION
-            if (todayEvents.isNotEmpty()) {
+            if (displayToday.isNotEmpty()) {
                 Text(
                     text = "T O D A Y",
                     color = headerColor,
@@ -80,7 +95,7 @@ internal fun NothingWidgetPreviewCard(
                     modifier = Modifier.padding(bottom = 10.dp, start = 4.dp)
                 )
 
-                todayEvents.forEachIndexed { index, event ->
+                displayToday.forEachIndexed { index, event ->
                     EventBoxItem(
                         event = event,
                         isToday = true,
@@ -99,7 +114,7 @@ internal fun NothingWidgetPreviewCard(
             }
 
             // UPCOMING SECTION
-            if (upcomingEvents.isNotEmpty() || todayEvents.isEmpty()) {
+            if (displayUpcoming.isNotEmpty() || displayToday.isEmpty()) {
                 Text(
                     text = "U P C O M I N G",
                     color = headerColor,
@@ -112,7 +127,7 @@ internal fun NothingWidgetPreviewCard(
                     modifier = Modifier.padding(bottom = 10.dp, start = 4.dp)
                 )
 
-                if (upcomingEvents.isEmpty()) {
+                if (displayUpcoming.isEmpty()) {
                     Text(
                         text = "No upcoming events",
                         color = headerColor,
@@ -121,12 +136,12 @@ internal fun NothingWidgetPreviewCard(
                         modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 8.dp)
                     )
                 } else {
-                    upcomingEvents.forEachIndexed { index, event ->
+                    displayUpcoming.forEachIndexed { index, event ->
                         EventBoxItem(
                             event = event,
                             isToday = false,
                             isFirstToday = false,
-                            eventIndex = todayEvents.size + index,
+                            eventIndex = displayToday.size + index,
                             theme = theme,
                             onClick = { onEventClick(event) }
                         )
@@ -147,33 +162,13 @@ internal fun EventBoxItem(
     onClick: () -> Unit
 ) {
     val look = ThemeMath.resolve(theme, event.color, eventIndex, isToday, isFirstToday)
-    val a = look.fillAlpha / 255f
-    val cardModifier = if (look.gradient != null) {
-        Modifier.background(
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color(ThemeMath.gradientStart(look.gradient)).copy(alpha = a),
-                    Color(ThemeMath.gradientEnd(look.gradient)).copy(alpha = a)
-                )
-            )
-        )
-    } else if (look.lightGradient) {
-        Modifier.background(
-            brush = Brush.verticalGradient(
-                listOf(Color(look.fillTop).copy(alpha = a), Color(look.fill).copy(alpha = a))
-            )
-        )
-    } else {
-        Modifier.background(Color(look.fill).copy(alpha = a))
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 5.dp)
             .height(56.dp)
             .clip(RoundedCornerShape(14.dp))
-            .then(cardModifier)
+            .cardBackground(look.spec, 14.dp)
             .clickable { onClick() }
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -223,4 +218,13 @@ internal fun EventBoxItem(
 private val ConsumeRemainingScroll = object : NestedScrollConnection {
     override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = available
     override suspend fun onPostFling(consumed: Velocity, available: Velocity) = available
+}
+
+/** The glass widget background ([ThemeSettings.bgStyle], with its glass level), drawn by the widget's [CardPainter]. */
+private fun Modifier.glassBackground(theme: ThemeSettings, radius: Dp): Modifier {
+    val style = theme.bgStyle
+    val spec = style.spec(if (style.color != 0) style.color else theme.bgColor)
+    return drawBehind {
+        drawIntoCanvas { CardPainter.draw(it.nativeCanvas, size.width, size.height, radius.toPx(), density, spec) }
+    }
 }

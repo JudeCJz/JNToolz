@@ -1,6 +1,9 @@
 package com.jntoolz.ui.counter
 
 import android.content.Context
+import androidx.compose.foundation.layout.Column
+import com.jntoolz.counter.CounterWidgetProvider
+import com.jntoolz.ui.common.AddWidgetButton
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,7 +59,6 @@ fun CounterScreen(onBack: () -> Unit) {
     val store = remember { CounterStore(context) }
     var counters by remember { mutableStateOf(store.all()) }
     var editing by remember { mutableStateOf<Counter?>(null) }
-    var adding by remember { mutableStateOf(false) }
 
     fun changed() {
         counters = store.all()
@@ -86,30 +88,34 @@ fun CounterScreen(onBack: () -> Unit) {
                     color = CounterColors.Text,
                     modifier = Modifier.weight(1f)
                 )
-                AddButton { adding = true }
-                Spacer(Modifier.width(12.dp))
             }
         }
     ) { inner ->
-        CounterList(
-            counters = counters,
-            onClick = { editing = it },
-            contentPadding = inner,
-        )
+        Column(Modifier.fillMaxSize().padding(inner)) {
+            AddWidgetButton(
+                CounterWidgetProvider::class.java,
+                Modifier.padding(horizontal = 20.dp).padding(top = 8.dp)
+            )
+            CounterList(
+                counters = counters,
+                onClick = { editing = it },
+                contentPadding = PaddingValues(0.dp),
+            )
+        }
     }
 
-    if (adding || editing != null) {
+    if (editing != null) {
         CounterEditorSheet(
             initial = editing,
-            onDismiss = { adding = false; editing = null },
+            onDismiss = { editing = null },
+            // APPLY: save and redraw the widgets; the editor stays open.
             onSave = {
                 store.save(it)
-                adding = false; editing = null
                 changed()
             },
             onDelete = {
                 store.delete(it.id)
-                adding = false; editing = null
+                editing = null
                 changed()
             }
         )

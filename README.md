@@ -1,6 +1,6 @@
 # JNToolz
 
-Minimalist utility suite and widgets designed for Nothing OS (Nothing Phone (1), (2), (2a), (2a) Plus, and Android 14+ / 15 / 16 / 17).
+Minimalist utility suite and widgets designed for Nothing OS (Nothing Phone (1), (2), (2a), (2a) Plus, (4a) Pro, and Android 14+ / 15 / 16 / 17).
 
 <p align="center">
   <img src="app/src/main/res/drawable/ic_jntoolz_logo.png" width="128" alt="JNToolz Logo" />
@@ -14,7 +14,7 @@ Installing JNToolz on your phone (or a friend's phone) takes less than 1 minute.
 
 ### Step 1: Download the APK
 1. Open your mobile browser and navigate to the **[Latest Release](https://github.com/JudeCJz/JNToolz/releases/latest)**.
-2. Under **Assets**, tap **`JNToolz-v1.0.4.apk`** to download it.
+2. Under **Assets**, tap **`JNToolz-v1.0.6.apk`** to download it.
 
 ### Step 2: Install the App
 1. When download completes, tap the notification or open your **Files** / **Downloads** app and tap the APK file.
@@ -53,6 +53,19 @@ Installing JNToolz on your phone (or a friend's phone) takes less than 1 minute.
 - **Per-calendar selection** grouped by Google account.
 - Reads events on-device through Android's `CalendarContract`. The optional Google account link is read-only and only used for colours.
 
+### Battery & Screen-On Time (SOT)
+- **Real-time Tracker**: Screen-on time, drain rates, per-app battery consumption, and history graphs.
+- **Hardware Telemetry**: Detects device model (e.g. Nothing Phone (4a) Pro), OS build, battery design capacity, health percentage, and device age with battery cycle count.
+- **Status Bar Icon**: Clean monochrome JNToolz logo in status bar, full battery icon in notification shade.
+- **Graph Export**: One-tap copy to clipboard with comprehensive hardware specs and drain logs.
+
+### Unscroll (Anti-Doomscroll)
+- **Focus Guard**: Tracks time spent in target social apps with gentle reminder notifications and auto-returning to home.
+- **Hard Mode Unlock**: Funny anti-scroll prompts with verification code to bypass lockout.
+
+### Counter Widget
+- Minimalist tap-counter widgets with customizable colors, gradient overlays, and glassmorphism.
+
 ### In-App Updater
 - Checks this repository's GitHub releases on launch and shows an update pill when a newer version exists.
 - Downloads the APK and hands it to the system installer (you confirm the install).
@@ -60,7 +73,7 @@ Installing JNToolz on your phone (or a friend's phone) takes less than 1 minute.
 ---
 
 ## 🔒 Privacy
-Calendar data stays on your device. See [PRIVACY.md](PRIVACY.md) for details.
+Calendar and battery data stay on your device. See [PRIVACY.md](PRIVACY.md) for details.
 
 ---
 
@@ -71,4 +84,4 @@ git clone https://github.com/JudeCJz/JNToolz.git
 cd JNToolz
 ./gradlew assembleRelease
 ```
-The output APK is `app/build/outputs/apk/release/JNToolz-v1.0.4.apk` (R8-minified; signed with the debug keystore so updates install over earlier builds).
+The output APK is `app/build/outputs/apk/release/JNToolz-v1.0.6.apk` (R8-minified; signed with the debug keystore so updates install over earlier builds).

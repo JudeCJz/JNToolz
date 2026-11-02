@@ -73,6 +73,8 @@ import com.jntoolz.data.WidgetPreferences
 import com.jntoolz.tools.Tool
 import com.jntoolz.tools.Tools
 import com.jntoolz.ui.counter.CounterHubCard
+import com.jntoolz.ui.common.ToolOnOffToggle
+import com.jntoolz.ui.unscroll.UnscrollHubCard
 import com.jntoolz.widget.WidgetUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -99,7 +101,8 @@ private fun openInBrowser(context: Context, url: String) {
 fun HubScreen(
     onOpenCalendar: () -> Unit,
     onOpenSot: () -> Unit,
-    onOpenCounter: () -> Unit
+    onOpenCounter: () -> Unit,
+    onOpenUnscroll: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -257,19 +260,13 @@ fun HubScreen(
 
                             Spacer(modifier = Modifier.width(12.dp))
 
-                            // Enable / Disable Switch
-                            Switch(
-                                checked = isCalendarEnabled,
-                                onCheckedChange = { checked ->
+                            // Enable / Disable Toggle
+                            ToolOnOffToggle(
+                                enabled = isCalendarEnabled,
+                                onToggle = { checked ->
                                     isCalendarEnabled = checked
                                     Tools.setEnabled(context, Tool.CALENDAR, checked)
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = TextWhite,
-                                    checkedTrackColor = AccentRed,
-                                    uncheckedThumbColor = MutedGrey,
-                                    uncheckedTrackColor = BorderGrey
-                                )
+                                }
                             )
                         }
                     }
@@ -320,19 +317,13 @@ fun HubScreen(
 
                             Spacer(modifier = Modifier.width(12.dp))
 
-                            // Enable / Disable Switch: starts or stops battery tracking
-                            Switch(
-                                checked = isSotEnabled,
-                                onCheckedChange = { checked ->
+                            // Enable / Disable Toggle: starts or stops battery tracking
+                            ToolOnOffToggle(
+                                enabled = isSotEnabled,
+                                onToggle = { checked ->
                                     isSotEnabled = checked
                                     Tools.setEnabled(context, Tool.BATTERY, checked)
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = TextWhite,
-                                    checkedTrackColor = AccentRed,
-                                    uncheckedThumbColor = MutedGrey,
-                                    uncheckedTrackColor = BorderGrey
-                                )
+                                }
                             )
                         }
                     }
@@ -340,6 +331,9 @@ fun HubScreen(
 
                 // Counter App Card
                 item { CounterHubCard(onOpen = onOpenCounter) }
+
+                // Unscroll Card
+                item { UnscrollHubCard(onOpen = onOpenUnscroll) }
             }
 
             // Bottom-Right Update Pill Button

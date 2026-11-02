@@ -39,9 +39,13 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private val _uiState = MutableStateFlow(MainUiState(hasPermission = repository.hasCalendarPermission()))
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
-    /** Single source of truth for the theme; prefs are written through [updateTheme]. */
+    /** Theme being edited: the preview and theme card show it; nothing is written until [applyTheme]. */
     private val _theme = MutableStateFlow(ThemeSettings.from(prefs))
     val theme: StateFlow<ThemeSettings> = _theme.asStateFlow()
+
+    /** The theme as last written to prefs (what the home-screen widgets show). */
+    private val _savedTheme = MutableStateFlow(_theme.value)
+    val savedTheme: StateFlow<ThemeSettings> = _savedTheme.asStateFlow()
 
     private var refreshJob: Job? = null
 
@@ -55,23 +59,17 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Applies [change] to the theme, persists it and pushes it to the widgets. */
+    /** Applies [change] to the draft theme only; see [applyTheme]. */
     fun updateTheme(change: (ThemeSettings) -> ThemeSettings) {
-        val old = _theme.value
-        val new = change(old)
-        if (new == old) return
-        _theme.value = new
+        _theme.update(change)
+    }
+
+    /** Writes the draft theme to prefs and redraws the Calendar widgets straight away. */
+    fun applyTheme() {
+        val new = _theme.value
+        _savedTheme.value = new
         viewModelScope.launch(Dispatchers.IO) {
-            if (new.useGoogleColors != old.useGoogleColors) prefs.useGoogleEventColors = new.useGoogleColors
-            if (new.markerStyle != old.markerStyle) prefs.markerStyle = new.markerStyle
-            if (new.dim != old.dim) prefs.isDimEnabled = new.dim
-            if (new.fade != old.fade) prefs.isFadeEnabled = new.fade
-            if (new.cardColor != old.cardColor) prefs.customCardColor = new.cardColor.toLong() and 0xFFFFFFFFL
-            if (new.gradientStyle != old.gradientStyle) prefs.cardGradientStyle = new.gradientStyle
-            if (new.markerColor != old.markerColor) prefs.markerColor = new.markerColor.toLong() and 0xFFFFFFFFL
-            if (new.gradient != old.gradient) prefs.isGradientEnabled = new.gradient
-            if (new.gradientTop != old.gradientTop) prefs.gradientTopColor = new.gradientTop.toLong() and 0xFFFFFFFFL
-            if (new.gradientIntensity != old.gradientIntensity) prefs.gradientIntensity = new.gradientIntensity
+            prefs.saveTheme(new)
             WidgetUpdater.updateAllWidgets(getApplication())
         }
     }

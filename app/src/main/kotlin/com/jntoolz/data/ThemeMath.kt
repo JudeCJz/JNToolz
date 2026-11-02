@@ -6,21 +6,37 @@ import kotlin.math.roundToInt
 data class ThemeSettings(
     val useGoogleColors: Boolean,
     val markerStyle: String,      // OFF, DOT, RING, BAR, CARD
-    val dim: Boolean,
     val fade: Boolean,
     val bgColor: Int,             // ARGB
     val cardColor: Int,           // ARGB
-    val gradientStyle: String,    // NONE, CHARCOAL, RUBY, CYBER, AMBER
+    val gradientStyle: String,    // legacy preset name, always NONE after WidgetPreferences migrates
     val markerColor: Int = 0,     // 0 = automatic
-    val gradient: Boolean = false, // top-colour-to-normal vertical gradient on card fills
+    val gradient: Boolean = false, // top-colour-to-normal gradient on card fills
     val gradientTop: Int = 0,      // 0 = auto (white tint)
-    val gradientIntensity: Int = 25 // 0..100
+    val gradientIntensity: Int = 25, // 0..100
+    val gradientAngle: Int = 0,    // 0..359, see CardMath.gradientLine
+    val glass: Boolean = false,
+    val bgGlass: Boolean = false,  // widget background (not the cards) is frosted glass
+    val bgGlassLevel: Int = CardStyle.DEFAULT_GLASS_LEVEL, // 0..100, see CardStyle.glassLevel
+    val glassLevel: Int = CardStyle.DEFAULT_GLASS_LEVEL,   // card glass, 0..100
 ) {
+    /** The shared card look; [cardColor] is always explicit here (never 0 = auto). */
+    val cardStyle: CardStyle
+        get() = CardStyle(cardColor, gradient, gradientTop, gradientIntensity, gradientAngle, glass, glassLevel)
+
+    /** The widget background look: black, optionally glass. Drawn by CardPainter like the cards. */
+    val bgStyle: CardStyle
+        get() = CardStyle(color = 0xFF000000.toInt(), glass = bgGlass, glassLevel = bgGlassLevel)
+
+    fun withCardStyle(s: CardStyle) = copy(
+        cardColor = s.color, gradient = s.gradient, gradientTop = s.gradientTop,
+        gradientIntensity = s.intensity, gradientAngle = s.angle, glass = s.glass, glassLevel = s.glassLevel
+    )
+
     companion object {
         fun from(p: WidgetPreferences) = ThemeSettings(
             useGoogleColors = p.useGoogleEventColors,
             markerStyle = p.markerStyle,
-            dim = false, // Dim option removed
             fade = p.isFadeEnabled,
             bgColor = p.widgetBackgroundColor.toInt(),
             cardColor = p.customCardColor.toInt(),
@@ -28,27 +44,31 @@ data class ThemeSettings(
             markerColor = p.markerColor.toInt(),
             gradient = p.isGradientEnabled,
             gradientTop = p.gradientTopColor.toInt(),
-            gradientIntensity = p.gradientIntensity
+            gradientIntensity = p.gradientIntensity,
+            gradientAngle = p.gradientAngle,
+            glass = p.isGlassEnabled,
+            bgGlass = p.isBgGlassEnabled,
+            bgGlassLevel = p.bgGlassLevel,
+            glassLevel = p.glassLevel,
         )
     }
 }
 
 /** Fully resolved look of one event card. Colors are ARGB ints. */
 data class CardLook(
-    val gradient: String?,     // non-null: gradient preset
-    val fill: Int,             // opaque RGB used for solid fill
-    val fillAlpha: Int,        // 0..255 applied to solid fill or gradient
+    val spec: CardSpec,        // how the card background is drawn, see CardPainter
     val title: Int,
     val sub: Int,
     val markerVisible: Boolean,
-    val markerColor: Int,
-    val lightGradient: Boolean = false, // fill is drawn as fillTop -> fill
-    val fillTop: Int = 0
+    val markerColor: Int
 )
 
 object ThemeMath {
     const val OPAQUE = 0xFF000000.toInt()
     const val RED = 0xFFFF2E2E.toInt()
+    /** Text on light surfaces; [WHITE] on dark ones (see [textOn]). */
+    const val INK = 0xFF111111.toInt()
+    const val WHITE = 0xFFFFFFFF.toInt()
 
     fun red(c: Int) = (c shr 16) and 0xFF
     fun green(c: Int) = (c shr 8) and 0xFF
@@ -64,9 +84,6 @@ object ThemeMath {
         (blue(a) + f * (blue(b) - blue(a))).roundToInt()
     )
 
-    fun scale(c: Int, f: Float): Int =
-        rgb((red(c) * f).roundToInt(), (green(c) * f).roundToInt(), (blue(c) * f).roundToInt())
-
     /** Relative luminance 0..1 of the RGB part. */
     fun luminance(c: Int): Float {
         fun lin(v: Int): Float {
@@ -81,22 +98,40 @@ object ThemeMath {
     /** Widget background as seen when composited over black (e.g. a dark wallpaper). */
     fun effectiveBg(bg: Int): Int = blend(OPAQUE, opaque(bg), alpha(bg) / 255f)
 
+    /**
+     * The card [spec] as seen composited over [under] (opaque RGB, default black wallpaper): the gradient's
+     * middle colour at the spec's fill alpha. Glass sheen is ignored (it is faint white on top).
+     */
+    fun surfaceOf(spec: CardSpec, under: Int = OPAQUE): Int {
+        val mid = blend(opaque(spec.top), opaque(spec.bottom), 0.5f)
+        val a = (alpha(spec.top) + alpha(spec.bottom)) / 2f / 255f
+        return blend(opaque(under), mid, a)
+    }
+
+    /** The one text rule of every tool: [INK] on a light [surfaceOf] surface, white on a dark one. */
+    fun textOn(spec: CardSpec, under: Int = OPAQUE): Int = if (isLight(surfaceOf(spec, under))) INK else WHITE
+
     fun headerColor(bg: Int): Int = if (isLight(effectiveBg(bg))) 0xFF666666.toInt() else 0xFF8E8E8E.toInt()
     fun dividerColor(bg: Int): Int = if (isLight(effectiveBg(bg))) 0xFFD4D4D4.toInt() else 0xFF252525.toInt()
 
-    fun gradientStart(style: String): Int = when (style) {
+    private fun gradientStart(style: String): Int = when (style) {
         "RUBY" -> 0xFF361717.toInt()
         "CYBER" -> 0xFF142B33.toInt()
         "AMBER" -> 0xFF302414.toInt()
         else -> 0xFF2A2B2D.toInt()
     }
 
-    fun gradientEnd(style: String): Int = when (style) {
+    private fun gradientEnd(style: String): Int = when (style) {
         "RUBY" -> 0xFF180A0A.toInt()
         "CYBER" -> 0xFF0A161A.toInt()
         "AMBER" -> 0xFF161008.toInt()
         else -> 0xFF141517.toInt()
     }
+
+    /** Style equivalent to a removed calendar gradient preset (null for "NONE"/unknown-empty). */
+    fun migratePreset(style: String, angle: Int): CardStyle? =
+        if (style == "NONE" || style.isEmpty()) null
+        else CardStyle.fromPreset(gradientStart(style), gradientEnd(style), angle)
 
     fun resolve(t: ThemeSettings, eventColor: Int, index: Int, isToday: Boolean, isFirstToday: Boolean): CardLook {
         val idx = index.coerceIn(0, 4)
@@ -106,34 +141,20 @@ object ThemeMath {
         val bgRgb = effectiveBg(t.bgColor)
         val cardMode = t.useGoogleColors && t.markerStyle == "CARD"
 
-        var gradient: String? = null
-        var fillAlpha = 255
         val fill: Int
-        val surface: Int
+        val fillAlpha: Int
         if (cardMode) {
-            var c = opaque(eventColor)
-            if (t.dim) c = scale(c, 0.30f)
-            fill = blend(c, bgRgb, frac)
-            surface = fill
-        } else if (t.gradientStyle != "NONE" && !t.gradient) {
-            // Gradient switch off: preset shows as its flat base colour
-            fill = blend(gradientStart(t.gradientStyle), bgRgb, frac)
-            surface = fill
-        } else if (t.gradientStyle != "NONE") {
-            gradient = t.gradientStyle
-            val a = if (t.fade) (1f - idx * 0.15f).coerceIn(0.4f, 1f) else 1f
-            fillAlpha = (a * 255).roundToInt()
-            fill = gradientStart(t.gradientStyle)
-            surface = blend(bgRgb, fill, a)
+            fill = blend(opaque(eventColor), bgRgb, frac)
+            fillAlpha = 255
         } else {
-            val a = alpha(t.cardColor)
-            fillAlpha = a
             fill = blend(opaque(t.cardColor), bgRgb, frac)
-            surface = blend(bgRgb, fill, a / 255f)
+            fillAlpha = alpha(t.cardColor)
         }
+        val spec = t.cardStyle.spec((fillAlpha shl 24) or (fill and 0xFFFFFF))
+        val surface = surfaceOf(spec, bgRgb)
 
-        val light = isLight(surface)
-        val titleBase = if (light) 0xFF111111.toInt() else 0xFFFFFFFF.toInt()
+        val titleBase = textOn(spec, bgRgb)
+        val light = titleBase == INK
         // Derived from the card surface so it stays readable on bright event colors
         val subBase = blend(titleBase, surface, 0.30f)
         val title = if (t.fade) blend(titleBase, surface, textFrac) else titleBase
@@ -145,12 +166,8 @@ object ThemeMath {
             t.useGoogleColors -> opaque(eventColor)
             isFirstToday -> RED
             isToday -> if (light) 0xFF777777.toInt() else 0xFFCCCCCC.toInt()
-            else -> if (light) 0xFF111111.toInt() else 0xFFFFFFFF.toInt()
+            else -> titleBase
         }
-        val lg = t.gradient && gradient == null
-        return CardLook(gradient, fill, fillAlpha, title, sub, markerVisible, markerColor, lg, if (lg) {
-            val top = if (t.gradientTop == 0) 0xFFFFFFFF.toInt() else opaque(t.gradientTop)
-            blend(fill, top, t.gradientIntensity.coerceIn(0, 100) / 100f)
-        } else fill)
+        return CardLook(spec, title, sub, markerVisible, markerColor)
     }
 }

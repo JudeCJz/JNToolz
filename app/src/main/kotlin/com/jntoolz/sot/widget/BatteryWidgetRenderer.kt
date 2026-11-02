@@ -9,6 +9,8 @@ import android.graphics.Path
 import android.graphics.Shader
 import android.graphics.Typeface
 import androidx.core.graphics.createBitmap
+import com.jntoolz.data.CardSpec
+import com.jntoolz.data.ThemeMath
 import com.jntoolz.sot.GraphMath
 import com.jntoolz.ui.theme.NothingFont
 import com.jntoolz.ui.theme.NothingFonts
@@ -18,8 +20,9 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * Draws a Battery graph widget face as one transparent bitmap (the background is a separate tinted view,
- * so the wallpaper colour can follow the system live). The configure preview shows this same bitmap.
+ * Draws a Battery graph widget face as one transparent bitmap (the background is a separate view: a tinted
+ * shape so the wallpaper colour can follow the system live, or a CardPainter bitmap of the style). The
+ * configure preview shows this same bitmap. On a light background surface everything is drawn in dark ink.
  *
  * Two layouts: one row (under 100 dp tall) has the graph on the left and the big value with one quiet line
  * under it on the right; taller widgets have the quiet value top-left, the big value top-right, the graph
@@ -35,11 +38,27 @@ object BatteryWidgetRenderer {
     private const val QUIET = 0x80FFFFFF.toInt()  // the label
     private const val DIM = 0x59FFFFFF            // "no data yet" dots
     private const val SHADOW = 0xB3000000.toInt() // behind everything on a clear background
+    // Dark ink equivalents, for light backgrounds (see darkInk).
+    private const val INK = ThemeMath.INK
+    private const val GREEN_DARK = 0xFF168A4A.toInt()
+    private const val SOFT_DARK = 0xC8111111.toInt()
+    private const val QUIET_DARK = 0x99111111.toInt()
+    private const val DIM_DARK = 0x59111111
+
+    /** Should the face use dark ink: the background [spec] (null = clear) is a light surface (ThemeMath.textOn). */
+    fun darkInk(spec: CardSpec?): Boolean = spec != null && ThemeMath.textOn(spec) == ThemeMath.INK
 
     /** Is this size the one-row layout (graph left, big value right)? */
     fun isRow(hDp: Int): Boolean = hDp < 100
 
-    fun render(cfg: BatteryWidgetConfig, face: Face, wDp: Int, hDp: Int, density: Float): Bitmap {
+    /**
+     * @param dark dark ink for a light background; the default judges the style over a black wallpaper colour,
+     *   the widget passes the live one (BatteryWidgets.surfaceSpec).
+     */
+    fun render(
+        cfg: BatteryWidgetConfig, face: Face, wDp: Int, hDp: Int, density: Float,
+        dark: Boolean = darkInk(cfg.surfaceSpec()),
+    ): Bitmap {
         val w0 = max(40, wDp) * density
         val h0 = max(40, hDp) * density
         // Cap the bitmap: scale the whole drawing down rather than cropping it.
@@ -50,18 +69,23 @@ object BatteryWidgetRenderer {
         val w = (w0 * k).roundToInt().coerceAtLeast(1)
         val h = (h0 * k).roundToInt().coerceAtLeast(1)
         val bmp = createBitmap(w, h)
-        Pen(d, cfg.bg == Background.CLEAR).run {
+        Pen(d, cfg.bg == Background.CLEAR, dark).run {
             if (isRow(hDp)) row(Canvas(bmp), face, w.toFloat(), h.toFloat()) else tall(Canvas(bmp), face, w.toFloat(), h.toFloat())
         }
         return bmp
     }
 
-    /** Paints and layouts for one bitmap at d px per dp; [clear] adds a soft shadow so it reads on any wallpaper. */
-    private class Pen(val d: Float, val clear: Boolean) {
+    /**
+     * Paints and layouts for one bitmap at d px per dp; [clear] adds a soft shadow so it reads on any wallpaper,
+     * [dark] swaps white for dark ink on a light background.
+     */
+    private class Pen(val d: Float, val clear: Boolean, val dark: Boolean) {
         // On a clear background translucent white vanishes over light wallpapers: opaque greys there.
-        val soft = if (clear) 0xFFEDEDED.toInt() else SOFT
-        val quiet = if (clear) 0xFFD6D6D6.toInt() else QUIET
-        val big = text(NothingFonts.typeface(NothingFont.NDOT_57), WHITE, 40f)
+        val soft = if (dark) SOFT_DARK else if (clear) 0xFFEDEDED.toInt() else SOFT
+        val quiet = if (dark) QUIET_DARK else if (clear) 0xFFD6D6D6.toInt() else QUIET
+        val ink = if (dark) INK else WHITE
+        val green = if (dark) GREEN_DARK else GREEN
+        val big = text(NothingFonts.typeface(NothingFont.NDOT_57), ink, 40f)
         val small = text(NothingFonts.typeface(NothingFont.LETTERA), soft, 11f)
         val label = text(NothingFonts.typeface(NothingFont.LETTERA), quiet, 11f)
 
@@ -87,7 +111,7 @@ object BatteryWidgetRenderer {
             val bw0 = bigText?.let { big.measureText(it) } ?: 0f
             if (bw0 > inner) big.textSize *= inner / bw0
             val bw = bigText?.let { big.measureText(it) } ?: 0f
-            small.color = if (f.smallCharging) GREEN else soft
+            small.color = if (f.smallCharging) green else soft
             val sw = f.small?.let { small.measureText(it) } ?: 0f
             val side = f.small == null || bigText == null || sw + 14 * d + bw <= inner
             val capBig = if (bigText != null) cap(big) else 0f
@@ -117,7 +141,7 @@ object BatteryWidgetRenderer {
             val bigText = f.big
             val p2 = small
             var secText = f.small ?: f.label
-            p2.color = if (f.small != null) (if (f.smallCharging) GREEN else soft) else quiet
+            p2.color = if (f.small != null) (if (f.smallCharging) green else soft) else quiet
             fun sizeBig(withSecond: Boolean): Float {
                 val secH = if (withSecond) cap(p2) + gap else 0f
                 big.textSize = ((h - 2 * pad - secH) / 0.72f / d).coerceIn(18f, 40f) * d
@@ -150,7 +174,7 @@ object BatteryWidgetRenderer {
         }
 
         /**
-         * The level line over [l, r] x [t, b] (0 % at b, 100 % at t): white, green while charging, a soft shade
+         * The level line over [l, r] x [t, b] (0 % at b, 100 % at t): ink, green while charging, a soft shade
          * under it and a dot at now. Time before the first sample is a dim dotted line at the first known level.
          */
         fun graph(cv: Canvas, f: Face, l: Float, t0: Float, r0: Float, b: Float, strokeDp: Float) {
@@ -166,7 +190,7 @@ object BatteryWidgetRenderer {
                     style = Paint.Style.STROKE
                     strokeWidth = 1.6f * d
                     strokeCap = Paint.Cap.ROUND
-                    color = DIM
+                    color = if (dark) DIM_DARK else DIM
                     pathEffect = DashPathEffect(floatArrayOf(0.01f, 4.5f * d), 0f)
                     if (clear) setShadowLayer(1.2f * d, 0f, 0.5f * d, SHADOW)
                 }
@@ -186,7 +210,8 @@ object BatteryWidgetRenderer {
                 area.lineTo(p[0], b)
                 area.close()
                 val fill = Paint(Paint.ANTI_ALIAS_FLAG)
-                fill.shader = LinearGradient(0f, top, 0f, b, if (clear) 0x2EFFFFFF else 0x47FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP)
+                val shade = if (dark) 0x2E111111 else if (clear) 0x2EFFFFFF else 0x47FFFFFF
+                fill.shader = LinearGradient(0f, top, 0f, b, shade, shade and 0xFFFFFF, Shader.TileMode.CLAMP)
                 cv.drawPath(area, fill)
 
                 val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -200,14 +225,14 @@ object BatteryWidgetRenderer {
                     val path = Path()
                     path.moveTo(p[2 * run[0]], p[2 * run[0] + 1])
                     for (i in run[0] until run[1]) segment(path, p, ctrl, i)
-                    line.color = if (run[2] == 1) GREEN else WHITE
+                    line.color = if (run[2] == 1) green else ink
                     cv.drawPath(path, line)
                 }
             }
             val x = p[2 * (n - 1)]
             val y = p[2 * (n - 1) + 1]
             val dot = Paint(Paint.ANTI_ALIAS_FLAG)
-            val color = if (f.charging) GREEN else WHITE
+            val color = if (f.charging) green else ink
             dot.color = (color and 0x00FFFFFF) or 0x2E000000
             cv.drawCircle(x, y, dotR * 2.1f, dot)
             dot.color = color

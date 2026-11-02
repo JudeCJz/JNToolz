@@ -134,27 +134,17 @@ private class NothingViewsFactory(private val context: Context, private val appW
                 val event = item.event
                 val look = ThemeMath.resolve(theme, event.color, item.eventIndex, item.isToday, item.isFirstToday)
 
-                // 1. Card background
-                if (look.gradient != null) {
-                    val gradRes = when (look.gradient) {
-                        "RUBY" -> R.drawable.box_gradient_ruby
-                        "CYBER" -> R.drawable.box_gradient_cyber
-                        "AMBER" -> R.drawable.box_gradient_amber
-                        else -> R.drawable.box_gradient_charcoal
-                    }
-                    views.setImageViewResource(R.id.iv_box_bg, gradRes)
-                    views.setInt(R.id.iv_box_bg, "setColorFilter", 0)
-                } else if (look.lightGradient) {
-                    views.setImageViewBitmap(
-                        R.id.iv_box_bg,
-                        WidgetBitmaps.card(context, look.fillTop, look.fill, look.fillAlpha, snap.cardWidthDp, 56)
-                    )
-                    views.setInt(R.id.iv_box_bg, "setColorFilter", 0)
-                } else {
+                // 1. Card background: flat colours use the tinted shape, everything else one painted bitmap
+                val spec = look.spec
+                if (spec.isPlain) {
                     views.setImageViewResource(R.id.iv_box_bg, R.drawable.box_event_shape)
-                    views.setInt(R.id.iv_box_bg, "setColorFilter", look.fill)
+                    views.setInt(R.id.iv_box_bg, "setColorFilter", spec.bottom or ThemeMath.OPAQUE)
+                    views.setInt(R.id.iv_box_bg, "setImageAlpha", ThemeMath.alpha(spec.bottom))
+                } else {
+                    views.setImageViewBitmap(R.id.iv_box_bg, WidgetBitmaps.card(context, spec, snap.cardWidthDp, 56))
+                    views.setInt(R.id.iv_box_bg, "setColorFilter", 0)
+                    views.setInt(R.id.iv_box_bg, "setImageAlpha", 255)
                 }
-                views.setInt(R.id.iv_box_bg, "setImageAlpha", if (look.lightGradient) 255 else look.fillAlpha)
 
                 // 2. Marker
                 if (look.markerVisible) {
@@ -196,13 +186,14 @@ private class NothingViewsFactory(private val context: Context, private val appW
     override fun getItemId(position: Int): Long {
         val items = snapshot.items
         if (position < 0 || position >= items.size) return position.toLong()
+        val themeHash = snapshot.theme.hashCode()
         return when (val item = items[position]) {
-            is TimelineListItem.Header -> Objects.hash("H", item.title).toLong()
-            is TimelineListItem.Divider -> Objects.hash("D").toLong()
+            is TimelineListItem.Header -> Objects.hash("H", item.title, themeHash).toLong()
+            is TimelineListItem.Divider -> Objects.hash("D", themeHash).toLong()
             is TimelineListItem.EventItem ->
-                Objects.hash("E", item.event.eventId, item.event.startTime).toLong()
+                Objects.hash("E", item.event.eventId, item.event.startTime, themeHash).toLong()
         }
     }
 
-    override fun hasStableIds(): Boolean = true
+    override fun hasStableIds(): Boolean = false
 }

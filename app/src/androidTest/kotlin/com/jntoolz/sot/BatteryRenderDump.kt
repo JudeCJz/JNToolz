@@ -14,6 +14,7 @@ import androidx.core.graphics.createBitmap
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.jntoolz.R
+import com.jntoolz.data.CardStyle
 import com.jntoolz.sot.widget.Background
 import com.jntoolz.sot.widget.BatteryWidgetConfig
 import com.jntoolz.sot.widget.BatteryWidgetModel
@@ -136,10 +137,13 @@ class BatteryRenderDump {
     /** One widget as the launcher shows it: rounded tinted background, then the face bitmap scaled into it. */
     private fun widget(c: Canvas, x: Float, y: Float, k: Float, s: Size, cfg: BatteryWidgetConfig, d: WidgetData) {
         val dst = RectF(x, y, x + s.w * k, y + s.h * k)
-        BatteryWidgets.backgroundColor(ctx, cfg.bg)?.let { col ->
+        val bg = BatteryWidgets.backgroundBitmap(ctx, cfg, s.w, s.h)
+        if (bg != null) c.drawBitmap(bg, null, dst, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+        else BatteryWidgets.backgroundColor(ctx, cfg.bg)?.let { col ->
             c.drawRoundRect(dst, radiusDp * k, radiusDp * k, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = col })
         }
-        val bmp = BatteryWidgetRenderer.render(cfg, BatteryWidgetModel.build(cfg, d), s.w, s.h, density)
+        val dark = BatteryWidgetRenderer.darkInk(BatteryWidgets.surfaceSpec(ctx, cfg))
+        val bmp = BatteryWidgetRenderer.render(cfg, BatteryWidgetModel.build(cfg, d), s.w, s.h, density, dark)
         val clip = Path().apply { addRoundRect(dst, radiusDp * k, radiusDp * k, Path.Direction.CW) }
         c.save()
         c.clipPath(clip)
@@ -205,9 +209,14 @@ class BatteryRenderDump {
                 sizes.map { s -> hs.map { Cell("${s.name} ${it.name}", s, def, it.data, light) } })
         }
         // 2. Backgrounds.
-        sheet("backgrounds", Background.entries.map { bg ->
+        val bgs = Background.CHOICES.map { it.name to def.copy(bg = it) } + listOf(
+            "GLASS" to def.copy(style = def.style.copy(glass = true)),
+            "LIGHT" to def.copy(style = CardStyle(color = 0xFFF4F4F4.toInt())),
+            "GRADIENT" to def.copy(style = CardStyle(color = 0xFF102040.toInt(), gradient = true, intensity = 40, angle = 45)),
+        )
+        sheet("backgrounds", bgs.map { (name, cfg) ->
             listOf(false, true).flatMap { light ->
-                listOf(sizes[1], sizes[4]).map { s -> Cell("${bg.name} ${s.name} ${if (light) "light" else "dark"}", s, def.copy(bg = bg), day, light) }
+                listOf(sizes[1], sizes[4]).map { s -> Cell("$name ${s.name} ${if (light) "light" else "dark"}", s, cfg, day, light) }
             }
         })
         // 3. Every option that changes the look, at 3x1 and 4x2 and 2x2.

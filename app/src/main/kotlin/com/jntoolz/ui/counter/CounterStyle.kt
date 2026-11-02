@@ -4,7 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -65,6 +64,9 @@ import com.jntoolz.tools.Tool
 import com.jntoolz.tools.Tools
 import com.jntoolz.ui.hub.OFF_ALPHA
 import com.jntoolz.counter.SizeDp
+import com.jntoolz.ui.common.PreviewBox
+import com.jntoolz.ui.common.ToolOnOffToggle
+import com.jntoolz.ui.common.PreviewBoxBorder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -103,7 +105,7 @@ internal fun CounterDarkTheme(content: @Composable () -> Unit) {
     )
 }
 
-/** Hub entry, same look as the Calendar / Juice cards: logo, name, enable switch. */
+/** Hub entry, same look as the Calendar / Battery cards: logo, name, enable switch. */
 @Composable
 fun CounterHubCard(onOpen: () -> Unit) {
     val context = LocalContext.current
@@ -143,18 +145,12 @@ fun CounterHubCard(onOpen: () -> Unit) {
                     .alpha(if (enabled) 1f else OFF_ALPHA)
             )
             Spacer(modifier = Modifier.width(12.dp))
-            Switch(
-                checked = enabled,
-                onCheckedChange = { checked ->
+            ToolOnOffToggle(
+                enabled = enabled,
+                onToggle = { checked ->
                     enabled = checked
                     Tools.setEnabled(context, Tool.COUNTER, checked)
-                },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = CounterColors.Text,
-                    checkedTrackColor = CounterColors.Red,
-                    uncheckedThumbColor = CounterColors.Muted,
-                    uncheckedTrackColor = CounterColors.Border,
-                )
+                }
             )
         }
     }
@@ -177,18 +173,16 @@ internal fun CounterWidgetTile(
     pad: Dp = 18.dp,
     onClick: (() -> Unit)? = null,
 ) {
-    val shape = RoundedCornerShape(18.dp)
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(Wallpaper)
-            .border(BorderStroke(if (selected) 2.dp else 1.dp, if (selected) CounterColors.Red else CounterColors.Border), shape)
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
-            .padding(pad),
-        contentAlignment = Alignment.Center
+    PreviewBox(
+        modifier = modifier,
+        padding = pad,
+        borderWidth = if (selected) 2.dp else 1.dp,
+        borderColor = if (selected) CounterColors.Red else PreviewBoxBorder,
+        onClick = onClick,
     ) {
-        CounterWidgetFace(counter, size, maxWidth = this.maxWidth, maxHeight = maxHeight)
+        BoxWithConstraints(contentAlignment = Alignment.Center) {
+            CounterWidgetFace(counter, size, maxWidth = this.maxWidth, maxHeight = maxHeight)
+        }
     }
 }
 

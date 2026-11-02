@@ -15,5 +15,5 @@
     android:previewImage="@drawable/ic_counter_logo"
     android:description="@string/counter_widget_description"
     android:configure="com.jntoolz.counter.CounterConfigureActivity"
-    android:widgetFeatures="reconfigurable|configuration_optional"
+    android:widgetFeatures="reconfigurable"
     android:widgetCategory="home_screen" />

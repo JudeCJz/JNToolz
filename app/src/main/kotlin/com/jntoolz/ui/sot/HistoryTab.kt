@@ -3,35 +3,42 @@ package com.jntoolz.ui.sot
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
-/** One card per day, newest first; tapping one drops down that whole day's graph and its sessions. */
+/** One card per day, newest first; tapping one drops down that day's graph (the picture only) with a copy icon. */
 @Composable
-internal fun HistoryTab(vm: SotViewModel, scroll: ScrollState) {
-    SotPage(scroll) {
+internal fun HistorySection(vm: SotViewModel) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         for (day in vm.days) key(day.from) {
-            DayCard(day, vm.openDay == day.from) { vm.toggleDay(day.from) }
+            DayCard(day, vm.openDay == day.from, { vm.toggleDay(day.from) }, vm::dayText)
         }
     }
 }
 
 @Composable
-private fun DayCard(day: DayUi, open: Boolean, onTap: () -> Unit) {
+private fun DayCard(day: DayUi, open: Boolean, onTap: () -> Unit, text: suspend (DayUi) -> String) {
     val chevron by animateFloatAsState(if (open) 90f else 0f, tween(200), label = "chevron")
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     SotCard(0.dp, Modifier.animateContentSize(tween(200)), border = if (open) SotColors.Red else SotColors.Border) {
         Row(
             modifier = Modifier
@@ -41,6 +48,10 @@ private fun DayCard(day: DayUi, open: Boolean, onTap: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             SotText(day.name.uppercase(), 13.sp, modifier = Modifier.weight(1f))
+            if (open && day.graph != null) {
+                CopyButton("Copy graph data") { scope.launch { copyGraph(ctx, text(day)) } }
+                Spacer(Modifier.width(10.dp))
+            }
             SotNumber(day.sot, 20.sp)
             SotText(
                 "›",
@@ -54,30 +65,16 @@ private fun DayCard(day: DayUi, open: Boolean, onTap: () -> Unit) {
         }
         val graph = day.graph
         if (open && graph != null) {
-            Column(Modifier.padding(bottom = 16.dp)) {
-                SotGraph(
-                    graph,
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                        .height(190.dp),
-                    day.rangeFrom,
-                    day.rangeTo
-                )
-                Column(Modifier.padding(top = 12.dp)) {
-                    for ((span, sot) in day.sessions) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 40.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            SotText(span, 12.sp, SotColors.Dim, bold = false, modifier = Modifier.weight(1f))
-                            SotText(sot, 12.sp)
-                        }
-                    }
-                }
-            }
+            SotGraph(
+                graph,
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 16.dp)
+                    .height(150.dp),
+                day.rangeFrom,
+                day.rangeTo,
+                axis = false
+            )
         }
     }
 }

@@ -2,6 +2,8 @@ package com.jntoolz.counter
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.jntoolz.data.CardMath
+import com.jntoolz.data.CardStyle
 import com.jntoolz.ui.theme.NothingFont
 import org.json.JSONArray
 import org.json.JSONObject
@@ -54,7 +56,7 @@ class CounterStore(context: Context) {
     fun counterIdForWidget(appWidgetId: Int): String? = prefs.getString(KEY_WIDGET + appWidgetId, null)
 
     fun setWidgetCounter(appWidgetId: Int, counterId: String) {
-        prefs.edit().putString(KEY_WIDGET + appWidgetId, counterId).apply()
+        prefs.edit().putString(KEY_WIDGET + appWidgetId, counterId).commit()
     }
 
     fun removeWidgets(ids: IntArray) {
@@ -72,7 +74,7 @@ class CounterStore(context: Context) {
     private fun write(list: List<Counter>) {
         val arr = JSONArray()
         list.forEach { arr.put(toJson(it)) }
-        prefs.edit().putString(KEY_LIST, arr.toString()).apply()
+        prefs.edit().putString(KEY_LIST, arr.toString()).commit()
     }
 
     companion object {
@@ -80,8 +82,17 @@ class CounterStore(context: Context) {
         private const val KEY_LIST = "list"
         private const val KEY_WIDGET = "widget_"
         private const val KEY_ENABLED = "enabled"
-        /** JSON format: 2 = the 7-theme set (older counters may need [CounterTheme.legacyFont]). */
-        private const val FORMAT = 2
+        /**
+         * JSON format: 2 = the 7-theme set (older counters may need [CounterTheme.legacyFont]);
+         * 3 = no themes, the look is the card style + font only (theme is written as BLACK for older versions).
+         */
+        private const val FORMAT = 3
+        /** Gradient angle of saves from before the shared card style: the old top-left to bottom-right diagonal. */
+        private const val LEGACY_ANGLE = 45
+        /** Card colour of the removed WHITE / YOU SOFT themes. */
+        const val LIGHT_CARD = 0xFFF4F4F4.toInt()
+        /** See-through amount given to counters of the removed GLASS theme (its card was 50% black). */
+        const val LEGACY_GLASS_LEVEL = 50
 
         fun newId(): String = UUID.randomUUID().toString()
 
@@ -90,35 +101,71 @@ class CounterStore(context: Context) {
             put("title", c.title)
             put("date", c.date.toString())
             c.time?.let { put("time", it.toString()) }
-            put("theme", c.theme.name)
-            if (c.gradient != CounterGradient.NONE) {
-                put("gradient", c.gradient.name)
-            }
+            put("theme", CounterTheme.BLACK.name)
+            if (c.cardStyle != CardStyle()) put("card", styleToJson(c.cardStyle))
             put("live", c.liveClock)
-            put("created", c.created.toString())
             put("shape", c.shape.name)
             c.font?.let { put("font", it.name) }
             put("v", FORMAT)
+        }
+
+        /**
+         * A removed theme folded into the card style: WHITE / YOU SOFT become the light card (when no colour was
+         * picked), GLASS becomes glass; the others (BLACK, RED, PROGRESS, YOU) were dark cards and change nothing.
+         */
+        fun migrateTheme(theme: CounterTheme, s: CardStyle): CardStyle = when (theme) {
+            CounterTheme.WHITE, CounterTheme.YOU_SOFT -> if (s.color == 0) s.copy(color = LIGHT_CARD) else s
+            CounterTheme.GLASS -> if (s.glass) s else s.copy(glass = true, glassLevel = LEGACY_GLASS_LEVEL)
+            else -> s
+        }
+
+        /** Saves from before the shared card style: a gradient preset name + angle becomes a [CardStyle]. */
+        fun legacyStyle(preset: String?, angle: Int): CardStyle =
+            CounterGradient.of(preset).toStyle(angle) ?: CardStyle()
+
+        private fun styleToJson(s: CardStyle) = JSONObject().apply {
+            put("color", s.color.toLong() and 0xFFFFFFFFL)
+            put("gradient", s.gradient)
+            put("top", s.gradientTop.toLong() and 0xFFFFFFFFL)
+            put("intensity", s.intensity)
+            put("angle", s.angle)
+            put("glass", s.glass)
+            put("glassLevel", s.glassLevel)
+        }
+
+        private fun styleFromJson(o: JSONObject): CardStyle {
+            val d = CardStyle()
+            return CardStyle(
+                color = o.optLong("color", d.color.toLong()).toInt(),
+                gradient = o.optBoolean("gradient", d.gradient),
+                gradientTop = o.optLong("top", d.gradientTop.toLong()).toInt(),
+                intensity = o.optInt("intensity", d.intensity).coerceIn(0, 100),
+                angle = CardMath.normalize(o.optInt("angle", d.angle)),
+                glass = o.optBoolean("glass", d.glass),
+                glassLevel = o.optInt("glassLevel", d.glassLevel).coerceIn(0, 100),
+            )
         }
 
         fun fromJson(o: JSONObject?): Counter? {
             o ?: return null
             return try {
                 val themeName = o.optString("theme")
-                val date = LocalDate.parse(o.getString("date"))
+                val style = o.optJSONObject("card")?.let { styleFromJson(it) } ?: legacyStyle(
+                    o.optString("gradient", "").takeIf { it.isNotEmpty() },
+                    o.optInt("gradientAngle", LEGACY_ANGLE)
+                )
                 Counter(
                     id = o.getString("id"),
                     title = o.optString("title", ""),
-                    date = date,
+                    date = LocalDate.parse(o.getString("date")),
                     time = o.optString("time", "").takeIf { it.isNotEmpty() }?.let { LocalTime.parse(it) },
-                    theme = CounterTheme.of(themeName),
-                    gradient = o.optString("gradient", "").takeIf { it.isNotEmpty() }?.let { CounterGradient.of(it) } ?: CounterGradient.NONE,
+                    cardStyle = migrateTheme(CounterTheme.of(themeName), style),
                     liveClock = o.optBoolean("live", false),
-                    created = o.optString("created", "").takeIf { it.isNotEmpty() }
-                        ?.let { LocalDate.parse(it) } ?: minOf(date, LocalDate.now()),
                     shape = CounterShape.of(o.optString("shape").takeIf { it.isNotEmpty() }),
-                    font = o.optString("font", "").takeIf { it.isNotEmpty() }?.let { NothingFont.of(it) }
-                        ?: CounterTheme.legacyFont(themeName, o.optInt("v", 1)),
+                    font = Counter.allowedFont(
+                        o.optString("font", "").takeIf { it.isNotEmpty() }?.let { NothingFont.of(it) }
+                            ?: CounterTheme.legacyFont(themeName, o.optInt("v", 1))
+                    ),
                 )
             } catch (e: Exception) {
                 null

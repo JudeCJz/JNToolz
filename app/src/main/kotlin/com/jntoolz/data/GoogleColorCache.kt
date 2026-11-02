@@ -95,8 +95,8 @@ class GoogleColorCache private constructor(context: Context) {
         "ev_" + (e.googleId?.let { "g_$it" } ?: if (e.eventId != 0L) "l_${e.eventId}" else "t_${e.title}")
     fun eventOverride(e: CalendarEvent): Int? =
         overrideKey(e).let { if (prefs.contains(it)) prefs.getInt(it, 0) else null }
-    fun setEventOverride(e: CalendarEvent, argb: Int) { prefs.edit().putInt(overrideKey(e), argb).apply() }
-    fun clearEventOverride(e: CalendarEvent) { prefs.edit().remove(overrideKey(e)).apply() }
+    fun setEventOverride(e: CalendarEvent, argb: Int) { prefs.edit().putInt(overrideKey(e), argb).commit() }
+    fun clearEventOverride(e: CalendarEvent) { prefs.edit().remove(overrideKey(e)).commit() }
     fun hasColorOverride(e: CalendarEvent): Boolean =
         eventOverride(e) != null || (e.labelId != null && labelColor(e.labelId) != null)
 

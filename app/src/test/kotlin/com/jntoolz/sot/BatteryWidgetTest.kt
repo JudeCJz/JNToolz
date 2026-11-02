@@ -3,6 +3,8 @@ package com.jntoolz.sot
 import com.jntoolz.sot.widget.Background
 import com.jntoolz.sot.widget.BatteryWidgetConfig
 import com.jntoolz.sot.widget.BatteryWidgetModel
+import com.jntoolz.sot.widget.BatteryWidgetRenderer
+import com.jntoolz.data.CardStyle
 import com.jntoolz.sot.widget.Range
 import com.jntoolz.sot.widget.RedrawThrottle
 import com.jntoolz.sot.widget.Value
@@ -32,7 +34,7 @@ class BatteryWidgetTest {
     fun config_oldSavesMapRemovedOptionsToDefaults() {
         // A save from before the redesign: 12H/TODAY ranges, HEALTH/CYCLES/NONE values, style switches and a font.
         val old = "r=TODAY;b=HEALTH;s=CYCLES;l=0;m=0;h=0;d=0;g=0;k=CLEAR;f=LETTERA"
-        assertEquals(BatteryWidgetConfig(label = false, bg = Background.CLEAR), BatteryWidgetConfig.decode(old))
+        assertEquals(BatteryWidgetConfig(range = Range.TODAY, label = false, bg = Background.CLEAR), BatteryWidgetConfig.decode(old))
         assertEquals(Range.H24, BatteryWidgetConfig.decode("r=H12").range)
         // NONE is no longer a big value; BATTERY is no longer a small one (it duplicated the big %).
         assertEquals(Value.BATTERY, BatteryWidgetConfig.decode("b=NONE").big)
@@ -41,6 +43,61 @@ class BatteryWidgetTest {
         assertEquals(Value.LEFT, BatteryWidgetConfig.decode("b=LEFT;s=SOT").big)
         // The new encoding carries only the kept keys.
         assertEquals("r=H24;b=BATTERY;s=SOT;l=1;k=BLACK", BatteryWidgetConfig().encode())
+        // Old values still load, junk falls back
+        assertEquals(Background.WALLPAPER, BatteryWidgetConfig.decode("k=WALLPAPER").bg)
+        assertEquals(Background.CLEAR, BatteryWidgetConfig.decode("k=CLEAR").bg)
+        assertEquals(Background.BLACK, BatteryWidgetConfig.decode("k=FROST").bg)
+    }
+
+    @Test
+    fun config_legacyGlassBecomesColourBackgroundWithGlassStyle() {
+        val c = BatteryWidgetConfig.decode("r=H24;b=BATTERY;s=SOT;l=1;k=GLASS")
+        assertEquals(Background.BLACK, c.bg)
+        assertEquals(CardStyle(color = 0xFF000000.toInt(), glass = true), c.style)
+        // It is saved in the new form and never written back as GLASS.
+        assertEquals("r=H24;b=BATTERY;s=SOT;l=1;k=BLACK;sl=1", c.encode())
+        assertEquals(c, BatteryWidgetConfig.decode(c.encode()))
+        // A saved glass level survives the conversion.
+        assertEquals(30, BatteryWidgetConfig.decode("k=GLASS;sv=30").style.glassLevel)
+        assertEquals(listOf(Background.BLACK, Background.CLEAR, Background.WALLPAPER), Background.CHOICES)
+        assertEquals("COLOR", Background.BLACK.label)
+    }
+
+    @Test
+    fun config_styleRoundTripsAndMissingKeysAreDefaults() {
+        val style = CardStyle(
+            color = 0xCC2266AA.toInt(), gradient = true, gradientTop = 0xFFFFEEDD.toInt(),
+            intensity = 70, angle = 135, glass = true, glassLevel = 35,
+        )
+        val c = BatteryWidgetConfig(range = Range.H6, bg = Background.BLACK, style = style)
+        assertEquals(c, BatteryWidgetConfig.decode(c.encode()))
+        assertEquals(
+            "r=H6;b=BATTERY;s=SOT;l=1;k=BLACK;sc=CC2266AA;sg=1;st=FFFFEEDD;si=70;sa=135;sl=1;sv=35",
+            c.encode()
+        )
+        // Default style: black, nothing extra written.
+        assertEquals(CardStyle(color = 0xFF000000.toInt()), BatteryWidgetConfig().style)
+        assertEquals(BatteryWidgetConfig().style, BatteryWidgetConfig.decode("k=BLACK").style)
+        // Partial and junk style keys fall back per key.
+        val p = BatteryWidgetConfig.decode("k=BLACK;sg=1;si=999;sa=-90;sc=zz")
+        assertEquals(CardStyle(color = 0xFF000000.toInt(), gradient = true, intensity = 100, angle = 270), p.style)
+    }
+
+    @Test
+    fun config_surfaceSpecAndInk() {
+        assertNull(BatteryWidgetConfig(bg = Background.CLEAR).surfaceSpec())
+        assertFalse(BatteryWidgetRenderer.darkInk(null))
+        // Plain black: white text.
+        assertFalse(BatteryWidgetRenderer.darkInk(BatteryWidgetConfig().surfaceSpec()))
+        // A light colour background switches to dark ink; glass over it lets the black wallpaper through.
+        val light = BatteryWidgetConfig(style = CardStyle(color = 0xFFF0F0F0.toInt()))
+        assertTrue(BatteryWidgetRenderer.darkInk(light.surfaceSpec()))
+        assertFalse(BatteryWidgetRenderer.darkInk(light.copy(style = light.style.copy(glass = true)).surfaceSpec()))
+        // Wallpaper uses the palette colour, not the style colour.
+        val wall = BatteryWidgetConfig(bg = Background.WALLPAPER, style = CardStyle(color = 0xFFF0F0F0.toInt()))
+        assertEquals(0xFF203040.toInt(), wall.surfaceSpec(0xFF203040.toInt())!!.bottom)
+        // Colour 0 resolves to black.
+        assertEquals(0xFF000000.toInt(), BatteryWidgetConfig(style = CardStyle()).surfaceSpec()!!.bottom)
     }
 
     @Test
@@ -56,6 +113,20 @@ class BatteryWidgetTest {
             longArrayOf(now - BatteryWidgetModel.MIN_SPAN, now),
             BatteryWidgetModel.window(Range.SINCE_UNPLUG, now, fresh)
         )
+    }
+
+    @Test
+    fun window_todayStartsAtMidnightButKeepsMinSpan() {
+        assertEquals(Range.TODAY, BatteryWidgetConfig.decode("r=TODAY").range)
+        assertEquals("r=TODAY;b=BATTERY;s=SOT;l=1;k=BLACK", BatteryWidgetConfig(range = Range.TODAY).encode())
+        val mid = Stats.midnight(now)
+        val w = BatteryWidgetModel.window(Range.TODAY, now, null)
+        assertEquals(minOf(mid, now - BatteryWidgetModel.MIN_SPAN), w[0])
+        assertEquals(now, w[1])
+        // Shortly after midnight the window is widened to the minimum span.
+        val early = mid + 5 * 60_000
+        assertEquals(early - BatteryWidgetModel.MIN_SPAN, BatteryWidgetModel.window(Range.TODAY, early, null)[0])
+        assertEquals("Today", BatteryWidgetModel.label(Range.TODAY))
     }
 
     @Test

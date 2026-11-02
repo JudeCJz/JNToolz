@@ -2,6 +2,7 @@ package com.jntoolz.tools
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -27,6 +28,17 @@ object WidgetKit {
             putExtra(MainActivity.EXTRA_OPEN_TOOL, toolId)
         }
         return PendingIntent.getActivity(ctx, requestCode, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    /**
+     * Asks the launcher to place one [provider] widget (the launcher shows its own "Add to home screen" sheet and,
+     * for a provider with a configure activity, opens it). Returns false when the launcher cannot pin, so the
+     * caller can tell the user to add it by hand from the widget list.
+     */
+    fun requestPin(ctx: Context, provider: Class<*>): Boolean {
+        val mgr = AppWidgetManager.getInstance(ctx)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !mgr.isRequestPinAppWidgetSupported) return false
+        return mgr.requestPinAppWidget(ComponentName(ctx, provider), null, null)
     }
 
     /**

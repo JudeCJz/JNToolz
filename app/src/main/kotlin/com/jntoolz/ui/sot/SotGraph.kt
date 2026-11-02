@@ -44,10 +44,10 @@ private class Placed(val r: TextLayoutResult, val at: Offset)
  * Battery level over the session: a white line with a fading shade under it (green while charging),
  * and a screen-on strip below. Drag sideways to inspect. With a range (r0 > 0) it shows exactly [r0, r1].
  * Everything but the drag readout is built once per data and size (drawWithCache); a drag frame only
- * draws the cursor and its readout.
+ * draws the cursor and its readout. [axis] = false leaves out the scale and time labels (History).
  */
 @Composable
-internal fun SotGraph(s: Stats?, modifier: Modifier = Modifier, r0: Long = 0, r1: Long = 0) {
+internal fun SotGraph(s: Stats?, modifier: Modifier = Modifier, r0: Long = 0, r1: Long = 0, axis: Boolean = true) {
     val context = LocalContext.current
     val tf = remember { DateFormat.getTimeFormat(context) }
     val dayFmt = remember { SimpleDateFormat("EEE ", Locale.getDefault()) }
@@ -55,13 +55,13 @@ internal fun SotGraph(s: Stats?, modifier: Modifier = Modifier, r0: Long = 0, r1
     val font = SotFonts.label
     var sx by remember { mutableFloatStateOf(-1f) }
 
-    val build: CacheDrawScope.() -> DrawResult = remember(s, r0, r1, font, measurer, tf, dayFmt) {
+    val build: CacheDrawScope.() -> DrawResult = remember(s, r0, r1, axis, font, measurer, tf, dayFmt) {
         {
             val d = density
             val w = size.width
             val top = 24 * d
-            val pb = size.height - 24 * d
-            val gx = 30 * d // left gutter for the 0/50/100 scale
+            val pb = size.height - (if (axis) 24 else 8) * d
+            val gx = (if (axis) 30 else 6) * d // left gutter for the 0/50/100 scale
             val pw = w - gx - 5 * d // room for the end dot
             val sh = 4 * d
             val st = pb + 6 * d
@@ -78,7 +78,7 @@ internal fun SotGraph(s: Stats?, modifier: Modifier = Modifier, r0: Long = 0, r1
 
             // Battery scale: faint gridlines at 0, 50 and 100 with their numbers in the gutter.
             val labels = ArrayList<Placed>()
-            for (lv in 0..100 step 50) labels += label(lv.toString(), gx - 8 * d, y(lv.toFloat()) + 4 * d, 1f, SotColors.Dim)
+            if (axis) for (lv in 0..100 step 50) labels += label(lv.toString(), gx - 8 * d, y(lv.toFloat()) + 4 * d, 1f, SotColors.Dim)
 
             if (s == null || s.empty || s.gt.isEmpty()) {
                 if (r0 == 0L) labels += label("Starts at the next unplug", w / 2, y(50f), 0.5f, SotColors.Dim)
@@ -118,7 +118,9 @@ internal fun SotGraph(s: Stats?, modifier: Modifier = Modifier, r0: Long = 0, r1
                 val endLabel = label("${s.gl[n - 1]}%", min(ex + 4 * d, w), max(ey - 12 * d, 12 * d), 1f, SotColors.Txt)
 
                 val ly = size.height - 2 * d
-                if (r0 > 0) {
+                if (!axis) {
+                    // History graphs are the picture only: no time labels.
+                } else if (r0 > 0) {
                     // Hour ticks spaced to fit: every hour for short spans, up to every 6 hours for a whole day.
                     val span = (r1 - r0) / Stats.HOUR
                     val step = (if (span <= 4) 1 else if (span <= 9) 2 else if (span <= 15) 3 else 6) * Stats.HOUR

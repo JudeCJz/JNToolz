@@ -17,6 +17,7 @@ import com.jntoolz.MainActivity
 import com.jntoolz.R
 import com.jntoolz.data.CalendarRepository
 import com.jntoolz.data.ThemeMath
+import com.jntoolz.data.ThemeSettings
 import com.jntoolz.data.WidgetPreferences
 
 class NothingCalendarWidgetProvider : AppWidgetProvider() {
@@ -113,12 +114,14 @@ class NothingCalendarWidgetProvider : AppWidgetProvider() {
             val prefs = WidgetPreferences(context)
             val views = RemoteViews(context.packageName, R.layout.widget_timeline_nothing)
 
-            // Background: white rounded shape tinted with the chosen ARGB color
-            val widgetBg = prefs.widgetBackgroundColor.toInt()
+            // Background: the shared card recipe (black, optionally glass) at the widget size, system corner radius
+            val theme = ThemeSettings.from(prefs)
+            val widgetBg = theme.bgColor
             val opts = appWidgetManager.getAppWidgetOptions(appWidgetId)
             val wDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).coerceAtLeast(60)
             val hDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 250).coerceAtLeast(60)
-            views.setImageViewBitmap(R.id.iv_widget_bg, WidgetBitmaps.background(context, widgetBg, wDp, hDp))
+            val bg = theme.bgStyle
+            views.setImageViewBitmap(R.id.iv_widget_bg, WidgetBitmaps.widget(context, bg.spec(bg.color), wDp, hDp))
             val textColor = ThemeMath.headerColor(widgetBg)
 
             if (!repository.hasCalendarPermission() || !prefs.isCalendarToolEnabled) {
@@ -150,6 +153,7 @@ class NothingCalendarWidgetProvider : AppWidgetProvider() {
             // Connect Scrollable RemoteViewsService
             val serviceIntent = Intent(context, NothingWidgetService::class.java).apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                putExtra("themeHash", theme.hashCode())
                 data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
             }
             views.setRemoteAdapter(R.id.lv_events, serviceIntent)

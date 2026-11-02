@@ -17,13 +17,14 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.jntoolz.ui.theme.NothingFont
 import java.io.File
 import java.io.FileOutputStream
+import com.jntoolz.data.CardStyle
 import java.time.LocalDate
 import java.time.LocalTime
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Not a real test: renders every counter theme x widget size x state through [CounterRenderer.face]
+ * Not a real test: renders every sample look x widget size x state through [CounterRenderer.face]
  * (the widget's own draw path) onto wallpaper-like backdrops and writes PNGs to
  * <external files>/render, so the faces can be looked at without touching the home screen.
  * Opens no activity. Run with `am instrument -e class com.jntoolz.counter.CounterRenderDump`.
@@ -51,13 +52,21 @@ class CounterRenderDump {
 
     private val today = LocalDate.of(2026, 11, 1)
 
-    private fun states(theme: CounterTheme, font: NothingFont? = null): List<State> {
+    /** Sample card looks (counters are themed only by their card style and font). */
+    private val looks = listOf(
+        "dark" to CardStyle(),
+        "light" to CardStyle(color = 0xFFF4F4F4.toInt()),
+        "glass" to CardStyle(glass = true, glassLevel = 50),
+        "gradient" to CardStyle(gradient = true, intensity = 40, angle = 45),
+    )
+
+    private fun states(style: CardStyle, font: NothingFont? = null): List<State> {
         fun c(title: String, date: LocalDate, time: LocalTime? = null, live: Boolean = false) = Counter(
-            id = "x", title = title, date = date, time = time, theme = theme, liveClock = live,
-            created = today.minusDays(30), font = font,
+            id = "x", title = title, date = date, time = time, cardStyle = style, liveClock = live, font = font,
         )
+        @Suppress("UNUSED_PARAMETER")
         fun d(phase: CounterDisplay.Phase, days: Long, label: String, progress: Float, ms: Long? = null) =
-            CounterDisplay(phase, days, if (phase == CounterDisplay.Phase.TODAY) "TODAY" else days.toString(), label, ms, progress)
+            CounterDisplay(phase, days, if (phase == CounterDisplay.Phase.TODAY) "TODAY" else days.toString(), label, ms)
         return listOf(
             State("future", c("Trip to Japan", today.plusDays(23)), d(CounterDisplay.Phase.FUTURE, 23, "DAYS LEFT", 0.57f)),
             State("oneday", c("Exam", today.plusDays(1)), d(CounterDisplay.Phase.FUTURE, 1, "DAY LEFT", 0.97f)),
@@ -138,9 +147,9 @@ class CounterRenderDump {
 
     private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.MONOSPACE; color = Color.WHITE }
 
-    /** All sizes (rows) x states (columns) of one theme. [k] px per dp of the sheet. */
-    private fun sheet(name: String, theme: CounterTheme, light: Boolean, k: Float, font: NothingFont? = null) {
-        val st = states(theme, font)
+    /** All sizes (rows) x states (columns) of one look. [k] px per dp of the sheet. */
+    private fun sheet(name: String, style: CardStyle, light: Boolean, k: Float, font: NothingFont? = null) {
+        val st = states(style, font)
         val gap = 16f
         val colW = 300f + gap
         val head = 26f
@@ -161,17 +170,17 @@ class CounterRenderDump {
             // Last column: the empty "+" state (top) / off state (others) at this size.
             val x = (gap + st.size * colW) * k
             val small = SizeDp(minOf(sz.size.w, 150), sz.size.h)
-            if (ri % 2 == 0) drawWidget(c, x, y * k, k, small, Counter("e", "", today, theme = theme), null)
+            if (ri % 2 == 0) drawWidget(c, x, y * k, k, small, Counter("e", "", today, cardStyle = style), null)
             else drawWidget(c, x, y * k, k, small, null, null, off = true)
             y += rowHs[ri]
         }
         save(bmp, name)
     }
 
-    /** Every theme x size x state as its own PNG at the phone's density. */
-    private fun singles(theme: CounterTheme, light: Boolean) {
+    /** Every size x state of one look as its own PNG at the phone's density. */
+    private fun singles(look: String, style: CardStyle, light: Boolean) {
         val k = density
-        for (sz in sizes) for (s in states(theme)) {
+        for (sz in sizes) for (s in states(style)) {
             val m = 24f
             val w = ((sz.size.w + 2 * m) * k).toInt()
             val h = ((sz.size.h + 2 * m) * k).toInt()
@@ -179,21 +188,21 @@ class CounterRenderDump {
             val c = Canvas(bmp)
             wallpaper(c, RectF(0f, 0f, w.toFloat(), h.toFloat()), light)
             drawWidget(c, m * k, m * k, k, sz.size, s.counter, s.display)
-            save(bmp, "single/${theme.name.lowercase()}_${sz.name}_${s.name}${if (light) "_light" else ""}")
+            save(bmp, "single/${look}_${sz.name}_${s.name}${if (light) "_light" else ""}")
         }
     }
 
     @Test
     fun dump() {
         File(out, "single").mkdirs()
-        for (t in CounterTheme.entries) {
-            sheet("sheet_${t.name.lowercase()}", t, light = false, k = 2f)
-            sheet("sheet_${t.name.lowercase()}_light", t, light = true, k = 2f)
-            singles(t, light = false)
+        for ((name, style) in looks) {
+            sheet("sheet_$name", style, light = false, k = 2f)
+            sheet("sheet_${name}_light", style, light = true, k = 2f)
+            singles(name, style, light = false)
         }
-        // Font option on the first theme.
-        for (f in listOf(NothingFont.NDOT_57, NothingFont.LETTERA, NothingFont.NTYPE_HEADLINE, NothingFont.SYSTEM)) {
-            sheet("font_${f.name.lowercase()}", CounterTheme.entries.first(), light = false, k = 2f, font = f)
+        // The one non-default font, on the first look.
+        for (f in Counter.FONTS.filterNotNull()) {
+            sheet("font_${f.name.lowercase()}", looks.first().second, light = false, k = 2f, font = f)
         }
     }
 }

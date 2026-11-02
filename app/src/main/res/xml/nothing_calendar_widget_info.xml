@@ -10,4 +10,6 @@
     android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/widget_timeline_nothing"
     android:description="@string/widget_description"
+    android:configure="com.jntoolz.widget.CalendarWidgetConfigureActivity"
+    android:widgetFeatures="reconfigurable|configuration_optional"
     android:widgetCategory="home_screen" />
