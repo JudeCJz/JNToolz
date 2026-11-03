@@ -29,6 +29,8 @@ object UpdateChecker {
     const val GITHUB_REPO_URL = "https://github.com/$REPO_OWNER/$REPO_NAME"
 
     val CURRENT_VERSION_CHANGELOG = """
+        • Calendar: new refresh button, and the calendar refreshes every time you open the app
+        • JN Calendar: Calendar is also available as its own app, a separate APK on the same releases page
         • Unscroll: Smart anti-doomscroll tool with customizable target apps & humorous Hard Mode unlock
         • Hardware Telemetry: Accurate live detection of phone model (Nothing Phone (4a) Pro), OS build, battery design capacity, health %, and physical device age with charge cycles
         • Battery Graph Export: Comprehensive clipboard export with prepended device hardware specifications
@@ -74,7 +76,7 @@ object UpdateChecker {
                     for (i in 0 until assets.length()) {
                         val asset = assets.optJSONObject(i) ?: continue
                         val assetName = asset.optString("name", "")
-                        if (assetName.endsWith(".apk", ignoreCase = true)) {
+                        if (assetName.startsWith("JNToolz", ignoreCase = true) && assetName.endsWith(".apk", ignoreCase = true)) {
                             apkDownloadUrl = if (asset.has("browser_download_url")) asset.getString("browser_download_url") else null
                             break
                         }

@@ -144,11 +144,18 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    private var syncJob: Job? = null
+
+    /**
+     * Full resync: device calendar, a Google sync request, linked Google accounts (events + colours) and every
+     * placed widget. Ignored while a run is already going, so resume/button/pull can't overlap or loop.
+     */
     fun syncGoogleAccounts() {
-        if (_uiState.value.isSyncing) return
-        viewModelScope.launch(Dispatchers.IO) {
+        if (syncJob?.isActive == true) return
+        syncJob = viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isSyncing = true) }
             try {
+                load()
                 repository.requestGoogleCalendarSync()
                 delay(1000)
                 refreshGoogleNow()

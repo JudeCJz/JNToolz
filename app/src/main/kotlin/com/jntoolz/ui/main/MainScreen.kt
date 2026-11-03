@@ -30,6 +30,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.rotate
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.material3.Button
 import com.jntoolz.ui.common.AddWidgetButton
 import com.jntoolz.ui.common.ApplyButton
@@ -203,6 +211,8 @@ fun MainScreen(
     LaunchedEffect(calendarMissing.isEmpty()) {
         if (calendarMissing.isEmpty() && !uiState.hasPermission) viewModel.refresh()
     }
+    // Full resync on entering the screen and every time the app comes back (also after the permission dialog).
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.syncGoogleAccounts() }
 
     Scaffold(
         containerColor = BgScreen,
@@ -246,6 +256,8 @@ fun MainScreen(
                     color = TextWhite,
                     style = TopBarTextStyle
                 )
+                Spacer(Modifier.weight(1f))
+                RefreshButton(spinning = uiState.isSyncing, onClick = viewModel::syncGoogleAccounts)
             }
         }
     ) { innerPadding ->
@@ -369,6 +381,46 @@ fun MainScreen(
                     .align(Alignment.BottomEnd)
                     .applyButtonPadding()
             )
+        }
+    }
+}
+
+/** Drawn refresh arc; spins while a sync runs. Taps are ignored mid-sync by the view model. */
+@Composable
+private fun RefreshButton(spinning: Boolean, onClick: () -> Unit) {
+    val angle = if (spinning) {
+        val t = rememberInfiniteTransition(label = "refresh")
+        t.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
+            label = "angle"
+        ).value
+    } else 0f
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(enabled = !spinning, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(20.dp).rotate(angle)) {
+            val stroke = 2.dp.toPx()
+            val pad = stroke
+            val tint = if (spinning) MutedGrey else TextWhite
+            drawArc(
+                color = tint, startAngle = -60f, sweepAngle = 290f, useCenter = false,
+                topLeft = Offset(pad, pad),
+                size = androidx.compose.ui.geometry.Size(size.width - 2 * pad, size.height - 2 * pad),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = StrokeCap.Round)
+            )
+            // arrowhead at the arc's start (-60deg)
+            val r = (size.width - 2 * pad) / 2f
+            val c = Offset(size.width / 2f, size.height / 2f)
+            val a = Math.toRadians(-60.0)
+            val tip = Offset(c.x + r * Math.cos(a).toFloat(), c.y + r * Math.sin(a).toFloat())
+            drawLine(tint, tip, Offset(tip.x + size.width * 0.28f, tip.y - size.width * 0.02f), stroke, StrokeCap.Round)
+            drawLine(tint, tip, Offset(tip.x + size.width * 0.04f, tip.y + size.width * 0.28f), stroke, StrokeCap.Round)
         }
     }
 }

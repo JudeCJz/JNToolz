@@ -13,8 +13,8 @@ android {
     applicationId = "com.jntoolz"
     minSdk = 26
     targetSdk = 36
-    versionCode = 8
-    versionName = "1.0.7"
+    versionCode = 9
+    versionName = "1.0.8"
   }
 
   // Release key lives outside git (keystore.properties + keystore/). Without it, release falls back to debug.
