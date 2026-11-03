@@ -1,68 +1,33 @@
 package com.jntoolz.unscroll
 
-/** An app with its own scroll-warning switch. [packages] are the Android packages behind it. */
-enum class WarnApp(val label: String, val packages: Set<String>) {
-    YOUTUBE("YouTube", setOf(ShortsRules.YOUTUBE)),
-    INSTAGRAM("Instagram", setOf(ShortsRules.INSTAGRAM)),
-    TIKTOK("TikTok", ShortsRules.TIKTOK),
-    FACEBOOK("Facebook", setOf(ShortsRules.FACEBOOK)),
-    REDDIT("Reddit", setOf(ShortsRules.REDDIT)),
-    LINKEDIN("LinkedIn", setOf(ShortsRules.LINKEDIN));
-
-    /** Preference key of this app's switch. */
-    val key: String get() = "warn_" + name.lowercase()
-
-    companion object {
-        private val BY_PACKAGE: Map<String, WarnApp> =
-            entries.flatMap { a -> a.packages.map { it to a } }.toMap()
-
-        fun of(pkg: String): WarnApp? = BY_PACKAGE[pkg]
-
-        /** The apps whose switch is worth showing: at least one of their packages is installed. */
-        fun installed(isInstalled: (String) -> Boolean): List<WarnApp> =
-            entries.filter { a -> a.packages.any(isInstalled) }
-    }
-}
-
-/** Which block switches to show: Shorts needs YouTube, Reels Instagram or Facebook, TikTok needs TikTok. */
-fun installedKinds(isInstalled: (String) -> Boolean): List<ShortKind> = buildList {
-    if (isInstalled(ShortsRules.YOUTUBE)) add(ShortKind.SHORTS)
-    if (isInstalled(ShortsRules.INSTAGRAM) || isInstalled(ShortsRules.FACEBOOK)) add(ShortKind.REELS)
-    if (ShortsRules.TIKTOK.any(isInstalled)) add(ShortKind.TIKTOK)
-}
-
 /** An immutable snapshot of the settings, cached by the service so events never touch SharedPreferences. */
 data class UnscrollConfig(
     val mode: GuardMode = GuardMode.OFF,
-    val blockShorts: Boolean = true,
-    val blockReels: Boolean = true,
-    val blockTikTok: Boolean = true,
     val warnMinutes: Int = 10,
-    val warnApps: Set<WarnApp> = WarnApp.entries.toSet(),
+    val onApps: Set<AddictiveApp> = AddictiveApp.entries.toSet(),
+    val pausedUntil: Long = 0L,
 ) {
     /** SOFT and HARD block alike; only OFF does nothing. */
     val enabled: Boolean get() = mode.blocking
 
-    /** Whether blocking [kind] is switched on. */
-    fun blocks(kind: ShortKind): Boolean = when (kind) {
-        ShortKind.SHORTS -> blockShorts
-        ShortKind.REELS -> blockReels
-        ShortKind.TIKTOK -> blockTikTok
-    }
+    /** Whether a SOFT pause is running at wall-clock [now] (ms). HARD and OFF never pause. */
+    fun pausedAt(now: Long) = mode == GuardMode.SOFT && now < pausedUntil
 
-    /** Whether the short-form part of [pkg] is blocked right now. */
-    fun blocksPackage(pkg: String): Boolean = enabled && when (pkg) {
-        ShortsRules.YOUTUBE -> blockShorts
-        ShortsRules.INSTAGRAM, ShortsRules.FACEBOOK -> blockReels
-        in ShortsRules.TIKTOK -> blockTikTok
-        else -> false
+    /** Whether the guard acts at [now]: on and not paused. Ends a pause on time with no setting change. */
+    fun activeAt(now: Long = System.currentTimeMillis()): Boolean = enabled && !pausedAt(now)
+
+    /** Whether the switch of [pkg]'s app is on. */
+    private fun appOn(pkg: String): AddictiveApp? = AddictiveApp.of(pkg)?.takeIf { it in onApps }
+
+    /** Whether the short-form part (tabs) or the whole of [pkg] is blocked right now. */
+    fun blocksPackage(pkg: String, now: Long = System.currentTimeMillis()): Boolean {
+        val a = appOn(pkg) ?: return false
+        return activeAt(now) && (a.guard == Guard.TABS || a.guard == Guard.WHOLE)
     }
 
     /** Whether long scrolling in [pkg] triggers a warning. */
-    fun warns(pkg: String): Boolean {
-        val a = WarnApp.of(pkg) ?: return false
-        return enabled && a in warnApps
-    }
+    fun warns(pkg: String, now: Long = System.currentTimeMillis()): Boolean =
+        appOn(pkg) != null && activeAt(now)
 }
 
 /** Gives up when blocks fire too often, so the user is never trapped in a back / home loop. */

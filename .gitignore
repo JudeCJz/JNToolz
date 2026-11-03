@@ -10,3 +10,8 @@ app/build
 .externalNativeBuild
 .cxx
 .kotlin
+
+# Release signing (never commit)
+/keystore/
+keystore.properties
+*.jks

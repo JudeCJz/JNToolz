@@ -62,6 +62,8 @@ import com.jntoolz.counter.CounterLayouts
 import com.jntoolz.counter.CounterRenderer
 import com.jntoolz.tools.Tool
 import com.jntoolz.tools.Tools
+import com.jntoolz.tools.ToolPerms
+import com.jntoolz.ui.common.AttentionDot
 import com.jntoolz.ui.hub.OFF_ALPHA
 import com.jntoolz.counter.SizeDp
 import com.jntoolz.ui.common.PreviewBox
@@ -134,22 +136,24 @@ fun CounterHubCard(onOpen: () -> Unit) {
                     .alpha(if (enabled) 1f else OFF_ALPHA)
             )
             Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = "Counter",
-                color = CounterColors.Text,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier
-                    .weight(1f)
-                    .alpha(if (enabled) 1f else OFF_ALPHA)
-            )
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Counter",
+                    color = CounterColors.Text,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.alpha(if (enabled) 1f else OFF_ALPHA)
+                )
+                AttentionDot(ToolPerms.needsAttention(context, Tool.COUNTER))
+            }
             Spacer(modifier = Modifier.width(12.dp))
             ToolOnOffToggle(
                 enabled = enabled,
                 onToggle = { checked ->
                     enabled = checked
                     Tools.setEnabled(context, Tool.COUNTER, checked)
+                    if (checked && ToolPerms.missing(context, Tool.COUNTER).isNotEmpty()) onOpen()
                 }
             )
         }

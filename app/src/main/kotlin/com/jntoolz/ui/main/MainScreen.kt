@@ -35,7 +35,10 @@ import com.jntoolz.ui.common.AddWidgetButton
 import com.jntoolz.ui.common.ApplyButton
 import com.jntoolz.ui.common.ApplyButtonClearance
 import com.jntoolz.ui.common.FitHeight
+import com.jntoolz.ui.common.PermissionGate
 import com.jntoolz.ui.common.PreviewBox
+import com.jntoolz.ui.common.rememberMissing
+import com.jntoolz.tools.Tool
 import com.jntoolz.ui.common.pinnedPreviewMaxHeight
 import com.jntoolz.ui.common.applyButtonPadding
 import androidx.compose.material3.HorizontalDivider
@@ -51,6 +54,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -192,6 +196,12 @@ fun MainScreen(
                 eventPicker = null
             }) else null
         )
+    }
+
+    PermissionGate(Tool.CALENDAR)
+    val calendarMissing by rememberMissing(Tool.CALENDAR)
+    LaunchedEffect(calendarMissing.isEmpty()) {
+        if (calendarMissing.isEmpty() && !uiState.hasPermission) viewModel.refresh()
     }
 
     Scaffold(

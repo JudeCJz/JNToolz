@@ -13,6 +13,7 @@ import com.jntoolz.sot.SotTool
 import com.jntoolz.sot.Store
 import com.jntoolz.sot.TrackerService
 import com.jntoolz.sot.widget.BatteryWidgets
+import com.jntoolz.unscroll.ForegroundWatcher
 import com.jntoolz.unscroll.UnscrollStore
 import com.jntoolz.widget.WidgetUpdater
 import kotlinx.coroutines.Dispatchers
@@ -53,7 +54,11 @@ enum class Tool(val id: String, val components: List<String>) {
     ),
     UNSCROLL(
         "unscroll",
-        listOf("com.jntoolz.unscroll.UnscrollService")
+        listOf(
+            "com.jntoolz.unscroll.UnscrollService",
+            "com.jntoolz.unscroll.ForegroundWatcher",
+            "com.jntoolz.unscroll.GateBootReceiver",
+        )
     );
 
     companion object {
@@ -73,7 +78,7 @@ object Tools {
     /** Not tied to a screen, so leaving the hub right after a tap cannot cancel the change half-way. */
     private val scope = CoroutineScope(SupervisorJob() + serial)
 
-    /** The stored flag. Existing keys are kept: calendar and counter default on, battery default off. */
+    /** The stored flag. Every tool is off until the user turns it on (seedDefaults keeps updated installs as they were). */
     fun isEnabled(c: Context, tool: Tool): Boolean = when (tool) {
         Tool.CALENDAR -> WidgetPreferences(c).isCalendarToolEnabled
         Tool.BATTERY -> SotTool.isEnabled(c)
@@ -105,13 +110,45 @@ object Tools {
     fun reconcile(c: Context) {
         val app = c.applicationContext
         scope.launch {
+            safe(Tool.CALENDAR) { seedDefaults(app) }
             for (tool in Tool.entries) {
                 val on = isEnabled(app, tool)
                 if (!on) safe(tool) { stopWork(app, tool) }
                 applyComponents(app, tool, on)
+                if (on && tool == Tool.UNSCROLL) safe(tool) { ForegroundWatcher.start(app) }
             }
         }
     }
+
+    /**
+     * Calendar and Counter used to default to on and now default to off. Once, on the first start of this
+     * version: an install that is an update and never wrote those switches gets the old default (on) written
+     * explicitly, so nobody's tools turn off on update. A fresh install writes nothing.
+     */
+    fun seedDefaults(c: Context) {
+        val app = c.applicationContext
+        val prefs = app.getSharedPreferences("tools", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("seeded", false)) return
+        val update = try {
+            val p = app.packageManager.getPackageInfo(app.packageName, 0)
+            p.firstInstallTime != p.lastUpdateTime
+        } catch (e: PackageManager.NameNotFoundException) {
+            false
+        }
+        val calendar = WidgetPreferences(app)
+        val counter = CounterStore(app)
+        val seed = seedDecision(update, calendar.hasCalendarToolFlag, counter.hasEnabledFlag)
+        if (seed.calendar) calendar.isCalendarToolEnabled = true
+        if (seed.counter) counter.enabled = true
+        prefs.edit().putBoolean("seeded", true).apply()
+    }
+
+    /** Which switches [seedDefaults] writes as on. */
+    data class Seed(val calendar: Boolean, val counter: Boolean)
+
+    /** Pure rule of [seedDefaults]: only an updated install, and only a switch that was never written. */
+    fun seedDecision(isUpdate: Boolean, calendarWritten: Boolean, counterWritten: Boolean): Seed =
+        Seed(calendar = isUpdate && !calendarWritten, counter = isUpdate && !counterWritten)
 
     private fun saveFlag(c: Context, tool: Tool, on: Boolean) {
         when (tool) {
@@ -127,7 +164,7 @@ object Tools {
             Tool.CALENDAR -> WidgetUpdater.updateAllWidgets(c)
             Tool.BATTERY -> TrackerService.start(c)
             Tool.COUNTER -> CounterWidgets.updateAll(c) // redraws and reschedules the midnight alarm
-            Tool.UNSCROLL -> Unit // the accessibility service reads the flag itself
+            Tool.UNSCROLL -> ForegroundWatcher.start(c) // gates the service to social apps when set up
         }
     }
 
@@ -150,7 +187,7 @@ object Tools {
                 val ids = CounterWidgets.ids(c)
                 if (ids.isNotEmpty()) CounterStore(c).removeWidgets(ids)
             }
-            Tool.UNSCROLL -> Unit // the service ignores events while the flag is off
+            Tool.UNSCROLL -> ForegroundWatcher.stop(c) // also switches the service off
         }
     }
 

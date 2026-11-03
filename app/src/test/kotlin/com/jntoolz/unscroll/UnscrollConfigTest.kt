@@ -9,42 +9,51 @@ import org.junit.Test
 
 class UnscrollConfigTest {
     @Test
-    fun timedAppsCoverRequestedSet() {
-        val want = setOf(
-            "com.reddit.frontpage", "com.linkedin.android", "com.google.android.youtube", "com.instagram.android",
-            "com.zhiliaoapp.musically", "com.ss.android.ugc.trill", "com.facebook.katana",
-        )
-        assertEquals(want, ShortsRules.TIMED)
-        assertEquals(want, WarnApp.entries.flatMap { it.packages }.toSet())
+    fun timedAppsAreInTheCatalogue() {
+        assertTrue(AddictiveApp.ALL_PACKAGES.containsAll(ShortsRules.TIMED))
     }
 
     @Test
     fun warnOnlyWhenEnabledAndAppOn() {
-        val c = UnscrollConfig(mode = GuardMode.SOFT, warnApps = setOf(WarnApp.REDDIT))
+        val c = UnscrollConfig(mode = GuardMode.SOFT, onApps = setOf(AddictiveApp.REDDIT, AddictiveApp.TIKTOK))
         assertTrue(c.warns(ShortsRules.REDDIT))
+        assertTrue(c.warns("com.zhiliaoapp.musically"))
         assertFalse(c.warns(ShortsRules.LINKEDIN))
         assertFalse(c.warns("com.other"))
         assertFalse(c.copy(mode = GuardMode.OFF).warns(ShortsRules.REDDIT))
     }
 
     @Test
-    fun blocksPackageFollowsSwitches() {
-        val c = UnscrollConfig(mode = GuardMode.HARD, blockShorts = false)
+    fun blocksPackageFollowsSwitchesAndGuard() {
+        val c = UnscrollConfig(mode = GuardMode.HARD, onApps = AddictiveApp.entries.toSet() - AddictiveApp.YOUTUBE)
         assertFalse(c.blocksPackage(ShortsRules.YOUTUBE))
         assertTrue(c.blocksPackage(ShortsRules.INSTAGRAM))
+        assertTrue(c.blocksPackage("com.instagram.lite"))
         assertTrue(c.blocksPackage("com.ss.android.ugc.trill"))
-        assertFalse(c.blocksPackage(ShortsRules.REDDIT))
+        assertTrue(c.blocksPackage("com.zhiliaoapp.musically.go"))
+        assertTrue(c.blocksPackage("in.mohalla.video"))
+        assertFalse(c.blocksPackage(ShortsRules.REDDIT)) // FEED apps only warn
+        assertFalse(c.blocksPackage("com.other"))
         assertFalse(c.copy(mode = GuardMode.OFF).blocksPackage(ShortsRules.INSTAGRAM))
     }
 
     @Test
-    fun switchesOnlyForInstalledApps() {
-        val none = installedKinds { false }
-        assertTrue(none.isEmpty())
-        assertEquals(listOf(ShortKind.SHORTS), installedKinds { it == ShortsRules.YOUTUBE })
-        assertEquals(listOf(ShortKind.REELS), installedKinds { it == ShortsRules.FACEBOOK })
-        assertEquals(listOf(ShortKind.TIKTOK), installedKinds { it == "com.ss.android.ugc.trill" })
-        assertEquals(setOf(WarnApp.REDDIT, WarnApp.LINKEDIN), WarnApp.installed { it == "com.reddit.frontpage" || it == "com.linkedin.android" }.toSet())
+    fun youtubeOffMeansNoBlockAndNoWarn() {
+        val c = UnscrollConfig(mode = GuardMode.SOFT, onApps = emptySet())
+        assertFalse(c.blocksPackage(ShortsRules.YOUTUBE))
+        assertFalse(c.warns(ShortsRules.YOUTUBE))
+    }
+
+    @Test
+    fun aliasesShareTheMainAppsRules() {
+        assertEquals("Shorts", ShortsRules.tabLabel("app.revanced.android.youtube"))
+        assertEquals("Reels", ShortsRules.tabLabel("com.instagram.lite"))
+        assertEquals("Reels", ShortsRules.tabLabel("com.facebook.lite"))
+        assertEquals(
+            ShortKind.SHORTS,
+            ShortsRules.classify("app.revanced.android.youtube", setOf("app.revanced.android.youtube:id/reel_recycler"), emptyList())
+        )
+        assertTrue(ShortsRules.clickLooksShort("com.facebook.lite", null, "Reels"))
     }
 
     @Test

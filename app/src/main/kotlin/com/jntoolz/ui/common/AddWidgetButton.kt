@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jntoolz.tools.WidgetKit
+import com.jntoolz.ui.sot.SotColors
 
 private val PillShape = RoundedCornerShape(50)
 
@@ -30,23 +31,29 @@ private val PillShape = RoundedCornerShape(50)
 @Composable
 fun AddWidgetButton(provider: Class<*>, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    OutlinedPillButton("+ ADD WIDGET", modifier) {
+        if (!WidgetKit.requestPin(context, provider)) {
+            Toast.makeText(context, "Long-press the home screen > Widgets > JNToolz", Toast.LENGTH_LONG).show()
+        }
+    }
+}
+
+/** The outlined pill behind [AddWidgetButton]; also used for in-app adds such as + ADD COUNTER. */
+@Composable
+fun OutlinedPillButton(text: String, modifier: Modifier = Modifier, filled: Boolean = false, onClick: () -> Unit) {
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(44.dp)
             .clip(PillShape)
-            .border(1.dp, Color(0xFF333333), PillShape)
-            .background(Color.Transparent)
-            .clickable {
-                if (!WidgetKit.requestPin(context, provider)) {
-                    Toast.makeText(context, "Long-press the home screen > Widgets > JNToolz", Toast.LENGTH_LONG).show()
-                }
-            },
+            .border(1.dp, if (filled) SotColors.Txt else Color(0xFF333333), PillShape)
+            .background(if (filled) SotColors.Txt else Color.Transparent)
+            .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "+ ADD WIDGET",
-            color = Color.White,
+            text = text,
+            color = if (filled) SotColors.Bg else Color.White,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
             fontSize = 13.sp,

@@ -1,6 +1,5 @@
 package com.jntoolz.ui.unscroll
 
-import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -18,6 +17,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -36,8 +36,11 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.jntoolz.R
 import com.jntoolz.tools.Tool
 import com.jntoolz.tools.Tools
+import com.jntoolz.tools.ToolPerms
+import com.jntoolz.ui.common.AttentionDot
 import com.jntoolz.ui.hub.OFF_ALPHA
 import com.jntoolz.ui.sot.SotColors
+import com.jntoolz.unscroll.ForegroundWatcher
 import com.jntoolz.unscroll.GuardMode
 import com.jntoolz.unscroll.UnscrollStore
 
@@ -51,13 +54,18 @@ fun UnscrollHubCard(onOpen: () -> Unit) {
     val context = LocalContext.current
     val store = remember { UnscrollStore(context) }
     var mode by remember { mutableStateOf(store.mode) }
+    var attention by remember { mutableStateOf(ToolPerms.needsAttention(context, Tool.UNSCROLL)) }
     var askHard by remember { mutableStateOf(false) }
     var unlockTo by remember { mutableStateOf<GuardMode?>(null) }
     val on = mode.blocking
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val paused = mode == GuardMode.SOFT && now < store.pausedUntil
 
     // Back from the Unscroll screen or system Settings: the mode may have been unlocked meanwhile.
     LifecycleResumeEffect(Unit) {
         mode = store.mode
+        now = System.currentTimeMillis()
+        attention = ToolPerms.needsAttention(context, Tool.UNSCROLL)
         onPauseOrDispose { }
     }
 
@@ -66,10 +74,8 @@ fun UnscrollHubCard(onOpen: () -> Unit) {
         store.mode = m
         mode = m
         Tools.setEnabled(context, Tool.UNSCROLL, m.blocking)
-        if (m.blocking && !UnscrollStore.isServiceOn(context)) {
-            Toast.makeText(context, "Turn on the Unscroll service", Toast.LENGTH_SHORT).show()
-            onOpen()
-        }
+        attention = ToolPerms.needsAttention(context, Tool.UNSCROLL)
+        if (m.blocking && ToolPerms.missing(context, Tool.UNSCROLL).isNotEmpty()) onOpen()
     }
 
     fun pick(m: GuardMode) {
@@ -104,16 +110,17 @@ fun UnscrollHubCard(onOpen: () -> Unit) {
                     .alpha(if (on) 1f else OFF_ALPHA)
             )
             Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = "Unscroll",
-                color = SotColors.Txt,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier
-                    .weight(1f)
-                    .alpha(if (on) 1f else OFF_ALPHA)
-            )
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (paused) "Unscroll  PAUSED ${(store.pausedUntil - now + 59_999) / 60_000}m" else "Unscroll",
+                    color = SotColors.Txt,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.alpha(if (on) 1f else OFF_ALPHA)
+                )
+                AttentionDot(attention)
+            }
             Spacer(modifier = Modifier.width(12.dp))
             ModeToggle(mode, ::pick)
         }

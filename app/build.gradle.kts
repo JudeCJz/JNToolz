@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
@@ -11,17 +13,28 @@ android {
     applicationId = "com.jntoolz"
     minSdk = 26
     targetSdk = 36
-    versionCode = 7
-    versionName = "1.0.6"
+    versionCode = 8
+    versionName = "1.0.7"
+  }
+
+  // Release key lives outside git (keystore.properties + keystore/). Without it, release falls back to debug.
+  val keyProps = rootProject.file("keystore.properties").takeIf { it.exists() }
+    ?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
+  signingConfigs {
+    if (keyProps != null) create("release") {
+      storeFile = rootProject.file(keyProps.getProperty("storeFile").removePrefix("../"))
+      storePassword = keyProps.getProperty("storePassword")
+      keyAlias = keyProps.getProperty("keyAlias")
+      keyPassword = keyProps.getProperty("keyPassword")
+    }
   }
 
   buildTypes {
     release {
       isMinifyEnabled = true
       isShrinkResources = true
-      // Debug keystore on purpose: Google OAuth is registered for the debug SHA-1 and
-      // updates must install over earlier debug-signed releases.
-      signingConfig = signingConfigs.getByName("debug")
+      // Own key since 1.0.7 (Play Protect distrusts the debug cert). Its SHA-1 needs its own Android OAuth client.
+      signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
     }
   }

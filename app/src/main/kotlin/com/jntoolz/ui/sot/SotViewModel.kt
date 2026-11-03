@@ -164,8 +164,6 @@ internal class SotViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) { prefs.edit().putBoolean("openToday", on).apply() }
     }
 
-    fun askedNotif(): Boolean = prefs.getBoolean("askedNotif", false)
-    fun markAskedNotif() = prefs.edit().putBoolean("askedNotif", true).apply()
     fun askedBt(): Boolean = prefs.getBoolean("askedBt", false)
     fun markAskedBt() = prefs.edit().putBoolean("askedBt", true).apply()
 

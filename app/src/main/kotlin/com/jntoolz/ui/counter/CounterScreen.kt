@@ -4,6 +4,12 @@ import android.content.Context
 import androidx.compose.foundation.layout.Column
 import com.jntoolz.counter.CounterWidgetProvider
 import com.jntoolz.ui.common.AddWidgetButton
+import com.jntoolz.ui.common.OutlinedPillButton
+import com.jntoolz.ui.sot.SotColors
+import com.jntoolz.ui.sot.SotLabel
+import com.jntoolz.ui.sot.SotTopBar
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -59,6 +65,7 @@ fun CounterScreen(onBack: () -> Unit) {
     val store = remember { CounterStore(context) }
     var counters by remember { mutableStateOf(store.all()) }
     var editing by remember { mutableStateOf<Counter?>(null) }
+    var adding by remember { mutableStateOf(false) }
 
     fun changed() {
         counters = store.all()
@@ -68,40 +75,37 @@ fun CounterScreen(onBack: () -> Unit) {
     Scaffold(
         containerColor = CounterColors.Bg,
         topBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(CounterColors.Bg)
-                    .statusBarsPadding()
-                    .height(56.dp)
-                    .padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BackArrow(onBack)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "COUNTER",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 2.sp,
-                    color = CounterColors.Text,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            SotTopBar("COUNTER", onBack)
         }
     ) { inner ->
         Column(Modifier.fillMaxSize().padding(inner)) {
-            AddWidgetButton(
-                CounterWidgetProvider::class.java,
-                Modifier.padding(horizontal = 20.dp).padding(top = 8.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedPillButton("+ ADD COUNTER", Modifier.weight(1f), filled = true) { adding = true }
+                AddWidgetButton(CounterWidgetProvider::class.java, Modifier.weight(1f))
+            }
             CounterList(
                 counters = counters,
                 onClick = { editing = it },
                 contentPadding = PaddingValues(0.dp),
+                onEmptyClick = { adding = true },
             )
         }
+    }
+
+    if (adding) {
+        CounterEditorSheet(
+            initial = null,
+            onDismiss = { adding = false },
+            // A new counter lives in the list on its own; a widget can pick it later.
+            onSave = {
+                store.save(it)
+                adding = false
+                changed()
+            }
+        )
     }
 
     if (editing != null) {
@@ -137,6 +141,7 @@ internal fun CounterList(
     contentPadding: PaddingValues,
     selectedId: String? = null,
     forcedSize: SizeDp? = null,
+    onEmptyClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     // Re-read placed widget sizes whenever the screen comes back (the user may have resized one).
@@ -160,15 +165,25 @@ internal fun CounterList(
     ) {
         if (counters.isEmpty()) {
             item {
-                Text(
-                    "NO COUNTERS",
-                    color = Color(0xFF3A3A3A),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    letterSpacing = 1.5.sp,
-                    modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
-                    textAlign = TextAlign.Center
-                )
+                val emptyShape = RoundedCornerShape(18.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .clip(emptyShape)
+                        .border(1.dp, SotColors.Border, emptyShape)
+                        .then(if (onEmptyClick != null) Modifier.clickable { onEmptyClick() } else Modifier),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        "+",
+                        color = SotColors.Dim,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 36.sp,
+                    )
+                    SotLabel("NO COUNTERS", color = SotColors.Dim)
+                }
             }
         }
         items(counters, key = { it.id }) { c ->

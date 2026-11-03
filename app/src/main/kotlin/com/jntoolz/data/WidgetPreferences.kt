@@ -34,8 +34,12 @@ class WidgetPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_HAS_CUSTOM_CALENDARS, value).apply()
 
     var isCalendarToolEnabled: Boolean
-        get() = prefs.getBoolean(KEY_CALENDAR_TOOL_ENABLED, true)
+        get() = prefs.getBoolean(KEY_CALENDAR_TOOL_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_CALENDAR_TOOL_ENABLED, value).apply()
+
+    /** Whether the tool switch was ever written (an install from before the default turned off has it unset). */
+    val hasCalendarToolFlag: Boolean
+        get() = prefs.contains(KEY_CALENDAR_TOOL_ENABLED)
 
     var lastSeenVersion: String
         get() = prefs.getString(KEY_LAST_SEEN_VERSION, "") ?: ""

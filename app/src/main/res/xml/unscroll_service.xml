@@ -6,4 +6,4 @@
     android:canRetrieveWindowContent="true"
     android:description="@string/unscroll_service_description"
     android:notificationTimeout="150"
-    android:packageNames="com.google.android.youtube,com.instagram.android,com.facebook.katana,com.zhiliaoapp.musically,com.ss.android.ugc.trill,com.reddit.frontpage,com.linkedin.android" />
+    android:packageNames="com.google.android.youtube,app.revanced.android.youtube,com.instagram.android,com.instagram.lite,com.facebook.katana,com.facebook.lite,com.zhiliaoapp.musically,com.ss.android.ugc.trill,com.zhiliaoapp.musically.go,in.mohalla.video,com.eterno.shortvideos,io.chingari.app,com.roposo.android,video.like,com.kwai.video,com.bd.nproject,com.snapchat.android,com.twitter.android,com.reddit.frontpage,com.linkedin.android,com.pinterest,com.instagram.barcelona,com.tumblr,com.ninegag.android.app,com.quora.android,in.mohalla.sharechat,xyz.blueskyweb.app,tv.twitch.android.app,org.joinmastodon.android" />

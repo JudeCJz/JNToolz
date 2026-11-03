@@ -48,10 +48,14 @@ class CounterStore(context: Context) {
 
     /** Tool switch on the hub card; off widgets show a dimmed logo and no alarm runs. */
     var enabled: Boolean
-        get() = prefs.getBoolean(KEY_ENABLED, true)
+        get() = prefs.getBoolean(KEY_ENABLED, false)
         set(value) {
             prefs.edit().putBoolean(KEY_ENABLED, value).apply()
         }
+
+    /** Whether the tool switch was ever written (an install from before the default turned off has it unset). */
+    val hasEnabledFlag: Boolean
+        get() = prefs.contains(KEY_ENABLED)
 
     fun counterIdForWidget(appWidgetId: Int): String? = prefs.getString(KEY_WIDGET + appWidgetId, null)
 

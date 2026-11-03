@@ -16,6 +16,10 @@
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
+    <!-- Unscroll: switches its accessibility service on and off; granted once over adb. -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
     <!-- Battery "Used most": app names and icons. "Turn off": radio and hotspot state. -->
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
@@ -31,12 +35,34 @@
         <package android:name="com.android.settings" />
         <!-- Unscroll: show switches only for installed apps -->
         <package android:name="com.google.android.youtube" />
+        <package android:name="app.revanced.android.youtube" />
         <package android:name="com.instagram.android" />
+        <package android:name="com.instagram.lite" />
         <package android:name="com.facebook.katana" />
+        <package android:name="com.facebook.lite" />
         <package android:name="com.zhiliaoapp.musically" />
         <package android:name="com.ss.android.ugc.trill" />
+        <package android:name="com.zhiliaoapp.musically.go" />
+        <package android:name="in.mohalla.video" />
+        <package android:name="com.eterno.shortvideos" />
+        <package android:name="io.chingari.app" />
+        <package android:name="com.roposo.android" />
+        <package android:name="video.like" />
+        <package android:name="com.kwai.video" />
+        <package android:name="com.bd.nproject" />
+        <package android:name="com.snapchat.android" />
+        <package android:name="com.twitter.android" />
         <package android:name="com.reddit.frontpage" />
         <package android:name="com.linkedin.android" />
+        <package android:name="com.pinterest" />
+        <package android:name="com.instagram.barcelona" />
+        <package android:name="com.tumblr" />
+        <package android:name="com.ninegag.android.app" />
+        <package android:name="com.quora.android" />
+        <package android:name="in.mohalla.sharechat" />
+        <package android:name="xyz.blueskyweb.app" />
+        <package android:name="tv.twitch.android.app" />
+        <package android:name="org.joinmastodon.android" />
     </queries>
 
     <application
@@ -183,6 +209,24 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/unscroll_service" />
         </service>
+
+        <!-- Unscroll: keeps the accessibility service off except while a social app is open, so banking apps run -->
+        <service
+            android:name=".unscroll.ForegroundWatcher"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Watches which app is in front to switch the user's own Unscroll accessibility service on only for social apps" />
+        </service>
+        <receiver
+            android:name=".unscroll.GateBootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

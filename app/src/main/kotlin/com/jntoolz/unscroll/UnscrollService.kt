@@ -19,7 +19,7 @@ import androidx.core.app.NotificationCompat
 import com.jntoolz.R
 
 /**
- * Keeps short-form feeds (Shorts, Reels, TikTok) from opening and warns after long continuous scrolling.
+ * Keeps short-form feeds (Shorts, Reels, short-video apps) from opening and warns after long continuous scrolling.
  *
  * Blocking, earliest first: a transparent overlay over the Shorts / Reels tab eats the tap; a click on a
  * Shorts / Reel entry arms a fast check; a throttled content check is the fallback that presses Back
@@ -35,7 +35,7 @@ class UnscrollService : AccessibilityService() {
     private val rect = Rect()
 
     private var leaving = false
-    private var lastTikTok = 0L
+    private var lastWhole = 0L
     private var lastInspect = 0L
     private var hotUntil = 0L
     private var inspectPkg = ""
@@ -51,17 +51,18 @@ class UnscrollService : AccessibilityService() {
 
     private val trailingRun = Runnable {
         trailingPending = false
-        if (cfg.enabled) inspect(inspectPkg)
+        if (cfg.activeAt()) inspect(inspectPkg)
     }
     private val tickRun = Runnable { tick() }
-    private val clickRun = Runnable { if (cfg.enabled && !leaving) inspect(inspectPkg) }
+    private val clickRun = Runnable { if (cfg.activeAt() && !leaving) inspect(inspectPkg) }
 
     override fun onServiceConnected() {
         store = UnscrollStore(this)
         store.watch { c ->
             cfg = c
             val p = overlayPkg
-            if (!c.enabled || p == null || !c.blocksPackage(p)) hideOverlay()
+            if (!c.activeAt() || p == null || !c.blocksPackage(p)) hideOverlay()
+            if (c.pausedAt(System.currentTimeMillis())) session.reset()
         }
         cfg = store.config
     }
@@ -69,7 +70,7 @@ class UnscrollService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val e = event ?: return
         val c = cfg
-        if (!c.enabled) return
+        if (!c.activeAt()) return
         val pkg = e.packageName?.toString() ?: return
         val type = e.eventType
 
@@ -82,11 +83,11 @@ class UnscrollService : AccessibilityService() {
         }
         if (!c.blocksPackage(pkg)) return
 
-        if (pkg in ShortsRules.TIKTOK) {
+        if (AddictiveApp.of(pkg)?.guard == Guard.WHOLE) {
             val now = SystemClock.elapsedRealtime()
-            if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && !leaving && now - lastTikTok > 1500) {
-                lastTikTok = now
-                block(ShortKind.TIKTOK, pkg)
+            if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && !leaving && now - lastWhole > 1500) {
+                lastWhole = now
+                block(appName(pkg), pkg, whole = true)
             }
             return
         }
@@ -166,7 +167,7 @@ class UnscrollService : AccessibilityService() {
         if (box != null) showOverlay(pkg, box, label.orEmpty()) else hideOverlay()
         if (leaving) return
         val kind = detect(root, pkg, label, tabSelected) ?: return
-        if (c.blocks(kind)) block(kind, pkg)
+        block(kind.label, pkg, whole = false)
     }
 
     /** The short-form feed on screen in [pkg] right now, or null. */
@@ -316,13 +317,13 @@ class UnscrollService : AccessibilityService() {
         Toast.makeText(this, "$overlayLabel blocked", Toast.LENGTH_SHORT).show()
     }
 
-    /** Toast, then Back; if still there shortly after, Back again, then Home. TikTok goes straight Home. */
-    private fun block(kind: ShortKind, pkg: String) {
+    /** Toast, then Back; if still there shortly after, Back again, then Home. A [whole] app goes straight Home. */
+    private fun block(what: String, pkg: String, whole: Boolean) {
         if (!limiter.allow(SystemClock.elapsedRealtime())) return
         leaving = true
         store.countBlock()
-        Toast.makeText(this, "${kind.label} blocked", Toast.LENGTH_SHORT).show()
-        if (kind == ShortKind.TIKTOK) {
+        Toast.makeText(this, "$what blocked", Toast.LENGTH_SHORT).show()
+        if (whole) {
             performGlobalAction(GLOBAL_ACTION_HOME)
             main.postDelayed({ leaving = false }, 800)
             return
@@ -332,7 +333,7 @@ class UnscrollService : AccessibilityService() {
     }
 
     private fun recheck(pkg: String, attempt: Int) {
-        if (!cfg.enabled || kindNow(pkg) == null) {
+        if (!cfg.activeAt() || kindNow(pkg) == null) {
             leaving = false
             return
         }
@@ -370,7 +371,7 @@ class UnscrollService : AccessibilityService() {
         }
     }
 
-    private fun appName(pkg: String): String = WarnApp.of(pkg)?.label ?: pkg.substringAfterLast('.')
+    private fun appName(pkg: String): String = AddictiveApp.of(pkg)?.label ?: pkg.substringAfterLast('.')
 
     private companion object {
         const val THROTTLE_MS = 300L

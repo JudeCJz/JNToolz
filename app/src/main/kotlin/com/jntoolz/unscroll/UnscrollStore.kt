@@ -25,7 +25,11 @@ class UnscrollStore(context: Context) {
     /** Saves before this existed only had "enabled": on reads as SOFT. "enabled" is still written for old readers. */
     var mode: GuardMode
         get() = GuardMode.restore(prefs.getString("mode", null), prefs.getBoolean("enabled", false))
-        set(v) = prefs.edit().putString("mode", v.name).putBoolean("enabled", v != GuardMode.OFF).apply()
+        set(v) {
+            val e = prefs.edit().putString("mode", v.name).putBoolean("enabled", v != GuardMode.OFF)
+            if (v != GuardMode.SOFT) e.putLong("paused_until", 0L) // a pause only exists in SOFT
+            e.apply()
+        }
 
     /** The tool switch ([com.jntoolz.tools.Tools]). Turning on from OFF gives SOFT; turning off is refused while HARD. */
     var enabled: Boolean
@@ -38,47 +42,24 @@ class UnscrollStore(context: Context) {
 
     val hard: Boolean get() = mode == GuardMode.HARD
 
-    var blockShorts: Boolean
-        get() = prefs.getBoolean("block_shorts", true)
-        set(v) = prefs.edit().putBoolean("block_shorts", v).apply()
-
-    var blockReels: Boolean
-        get() = prefs.getBoolean("block_reels", true)
-        set(v) = prefs.edit().putBoolean("block_reels", v).apply()
-
-    var blockTikTok: Boolean
-        get() = prefs.getBoolean("block_tiktok", true)
-        set(v) = prefs.edit().putBoolean("block_tiktok", v).apply()
-
     var warnMinutes: Int
         get() = prefs.getInt("warn_minutes", 10).takeIf { it in MINUTES } ?: 10
         set(v) = prefs.edit().putInt("warn_minutes", v).apply()
 
-    /** Whether the scroll warning is on for [app]; defaults to the old single switch so nothing changes on update. */
-    fun warns(app: WarnApp): Boolean = prefs.getBoolean(app.key, prefs.getBoolean("scroll_warning", true))
+    /**
+     * Whether the switch of [app] is on. Default on; a missing key is derived from the old block / warn keys
+     * (see [AddictiveApp.legacyOn]) so updates keep their choices.
+     */
+    fun on(app: AddictiveApp): Boolean =
+        if (prefs.contains(app.key)) prefs.getBoolean(app.key, true) else app.legacyOn(prefs::getBoolean)
 
-    fun setWarns(app: WarnApp, on: Boolean) = prefs.edit().putBoolean(app.key, on).apply()
-
-    /** Whether blocking [kind] is switched on. */
-    fun blocks(kind: ShortKind): Boolean = when (kind) {
-        ShortKind.SHORTS -> blockShorts
-        ShortKind.REELS -> blockReels
-        ShortKind.TIKTOK -> blockTikTok
-    }
-
-    fun setBlocks(kind: ShortKind, on: Boolean) = when (kind) {
-        ShortKind.SHORTS -> blockShorts = on
-        ShortKind.REELS -> blockReels = on
-        ShortKind.TIKTOK -> blockTikTok = on
-    }
+    fun setOn(app: AddictiveApp, on: Boolean) = prefs.edit().putBoolean(app.key, on).apply()
 
     private fun load() = UnscrollConfig(
         mode = mode,
-        blockShorts = blockShorts,
-        blockReels = blockReels,
-        blockTikTok = blockTikTok,
         warnMinutes = warnMinutes,
-        warnApps = WarnApp.entries.filterTo(HashSet()) { warns(it) },
+        onApps = AddictiveApp.entries.filterTo(HashSet()) { on(it) },
+        pausedUntil = pausedUntil,
     )
 
     /** The current settings. Cheap once [watch] was called: served from memory. */
@@ -108,7 +89,36 @@ class UnscrollStore(context: Context) {
         prefs.edit().putString("blocks_day", today).putInt("blocks", n + 1).apply()
     }
 
+    /** Wall-clock ms until which a SOFT pause keeps blocking off; 0 when not paused. Ends on its own. */
+    val pausedUntil: Long get() = prefs.getLong("paused_until", 0L)
+
+    fun isPaused(now: Long = System.currentTimeMillis()): Boolean = mode == GuardMode.SOFT && now < pausedUntil
+
+    /** Pauses started today (resets on a new day). */
+    val pausesToday: Int
+        get() = if (prefs.getString("pauses_day", null) == LocalDate.now().toString()) prefs.getInt("pauses", 0) else 0
+
+    /** Starts a pause of [minutes] (one of [PAUSE_MINUTES]); refused outside SOFT, while paused, or after [PAUSES_PER_DAY]. */
+    @Synchronized
+    fun pause(minutes: Int, now: Long = System.currentTimeMillis()): Boolean {
+        if (minutes !in PAUSE_MINUTES || mode != GuardMode.SOFT || isPaused(now) || pausesToday >= PAUSES_PER_DAY) return false
+        prefs.edit()
+            .putString("pauses_day", LocalDate.now().toString())
+            .putInt("pauses", pausesToday + 1)
+            .putLong("paused_until", now + minutes * 60_000L)
+            .apply()
+        return true
+    }
+
+    /** Ends a pause early. The pause still counts toward today's limit. */
+    fun resume() = prefs.edit().putLong("paused_until", 0L).apply()
+
+    /** The accessibility service is only switched on while a watched app is open (see AppGate); always true. */
+    val appScoped: Boolean get() = true
+
     companion object {
+        val PAUSE_MINUTES = listOf(5, 10, 15)
+        const val PAUSES_PER_DAY = 3
         const val FILE = "unscroll"
         val MINUTES = listOf(5, 10, 15, 20, 30)
         const val SERVICE_CLASS = "com.jntoolz.unscroll.UnscrollService"

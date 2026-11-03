@@ -28,7 +28,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jntoolz.sot.widget.BatteryWidgetProvider
+import com.jntoolz.tools.Tool
 import com.jntoolz.ui.common.AddWidgetButton
+import com.jntoolz.ui.common.PermissionGate
 
 /** The Battery tool (internal name sot): one dashboard page (gear in the top bar opens Settings), black OLED. */
 @Composable
@@ -41,15 +43,8 @@ fun SotScreen(onBack: () -> Unit) {
 
     val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.recheck() }
 
-    LaunchedEffect(Unit) {
-        vm.enter()
-        if (Build.VERSION.SDK_INT >= 33 && !vm.askedNotif() &&
-            context.checkSelfPermission(NOTIF) != PackageManager.PERMISSION_GRANTED
-        ) {
-            vm.markAskedNotif()
-            askPermission.launch(NOTIF)
-        }
-    }
+    PermissionGate(Tool.BATTERY)
+    LaunchedEffect(Unit) { vm.enter() }
     // Live updates only while the screen is resumed; permissions and tips are re-checked on each resume.
     LaunchedEffect(lifecycle) { lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { vm.whileResumed() } }
     DisposableEffect(Unit) { onDispose { vm.leave() } }

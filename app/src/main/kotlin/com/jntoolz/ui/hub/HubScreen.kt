@@ -53,6 +53,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -72,6 +73,8 @@ import com.jntoolz.data.UpdateChecker
 import com.jntoolz.data.WidgetPreferences
 import com.jntoolz.tools.Tool
 import com.jntoolz.tools.Tools
+import com.jntoolz.tools.ToolPerms
+import com.jntoolz.ui.common.AttentionDot
 import com.jntoolz.ui.counter.CounterHubCard
 import com.jntoolz.ui.common.ToolOnOffToggle
 import com.jntoolz.ui.unscroll.UnscrollHubCard
@@ -109,6 +112,14 @@ fun HubScreen(
     val prefs = remember { WidgetPreferences(context) }
     var isCalendarEnabled by remember { mutableStateOf(Tools.isEnabled(context, Tool.CALENDAR)) }
     var isSotEnabled by remember { mutableStateOf(Tools.isEnabled(context, Tool.BATTERY)) }
+    var calendarAttention by remember { mutableStateOf(ToolPerms.needsAttention(context, Tool.CALENDAR)) }
+    var sotAttention by remember { mutableStateOf(ToolPerms.needsAttention(context, Tool.BATTERY)) }
+    // Back from a tool or system Settings: the red markers follow the permissions.
+    LifecycleResumeEffect(Unit) {
+        calendarAttention = ToolPerms.needsAttention(context, Tool.CALENDAR)
+        sotAttention = ToolPerms.needsAttention(context, Tool.BATTERY)
+        onPauseOrDispose { }
+    }
 
     val currentVersion = remember { UpdateChecker.getCurrentVersionName(context) }
     var releaseInfo by remember { mutableStateOf<ReleaseInfo?>(null) }
@@ -249,13 +260,16 @@ fun HubScreen(
                                     .alpha(if (isCalendarEnabled) 1f else OFF_ALPHA)
                                     .clickable(enabled = isCalendarEnabled) { onOpenCalendar() }
                             ) {
-                                Text(
-                                    text = "Calendar",
-                                    color = TextWhite,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Calendar",
+                                        color = TextWhite,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    AttentionDot(calendarAttention)
+                                }
                             }
 
                             Spacer(modifier = Modifier.width(12.dp))
@@ -266,6 +280,8 @@ fun HubScreen(
                                 onToggle = { checked ->
                                     isCalendarEnabled = checked
                                     Tools.setEnabled(context, Tool.CALENDAR, checked)
+                                    calendarAttention = ToolPerms.needsAttention(context, Tool.CALENDAR)
+                                    if (checked && ToolPerms.missing(context, Tool.CALENDAR).isNotEmpty()) onOpenCalendar()
                                 }
                             )
                         }
@@ -306,13 +322,16 @@ fun HubScreen(
                                     .alpha(if (isSotEnabled) 1f else OFF_ALPHA)
                                     .clickable(enabled = isSotEnabled) { onOpenSot() }
                             ) {
-                                Text(
-                                    text = "Battery",
-                                    color = TextWhite,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Battery",
+                                        color = TextWhite,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    AttentionDot(sotAttention)
+                                }
                             }
 
                             Spacer(modifier = Modifier.width(12.dp))
@@ -323,6 +342,8 @@ fun HubScreen(
                                 onToggle = { checked ->
                                     isSotEnabled = checked
                                     Tools.setEnabled(context, Tool.BATTERY, checked)
+                                    sotAttention = ToolPerms.needsAttention(context, Tool.BATTERY)
+                                    if (checked && ToolPerms.missing(context, Tool.BATTERY).isNotEmpty()) onOpenSot()
                                 }
                             )
                         }

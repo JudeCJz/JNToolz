@@ -318,7 +318,11 @@ internal fun LinkRow(text: String, onClick: (() -> Unit)?) {
 
 /** A labelled switch row; the whole row is the tap target. Switch colours as on the hub. */
 @Composable
-internal fun SwitchRow(label: String, on: Boolean, onClick: () -> Unit) {
+internal fun SwitchRow(label: String, on: Boolean, onClick: () -> Unit) = SwitchRow(label, on, null, onClick)
+
+/** [SwitchRow] with a [tag]: a tiny dim word before the switch. */
+@Composable
+internal fun SwitchRow(label: String, on: Boolean, tag: String?, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -328,6 +332,10 @@ internal fun SwitchRow(label: String, on: Boolean, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         SotText(label, 13.sp, modifier = Modifier.weight(1f))
+        if (tag != null) {
+            SotLabel(tag)
+            Spacer(Modifier.width(10.dp))
+        }
         Switch(
             checked = on,
             onCheckedChange = null,
